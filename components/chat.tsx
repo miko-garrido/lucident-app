@@ -23,20 +23,20 @@ export function Chat() {
   // Example suggested prompts
   const suggestedPrompts = [
     {
-      title: "What are the advantages",
-      subtitle: "of using Next.js?",
+      title: "Deadlines",
+      subtitle: "What projects are overdue?",
     },
     {
-      title: "Write code to",
-      subtitle: "demonstrate dijkstra's algorithm",
+      title: "Distribution",
+      subtitle: "Who has the most tasks?",
     },
     {
-      title: "Help me write an essay",
-      subtitle: "about silicon valley",
+      title: "Standup",
+      subtitle: "How did the last 24 hours go?",
     },
     {
-      title: "What is the weather",
-      subtitle: "in San Francisco?",
+      title: "Blocks",
+      subtitle: "What are current roadblocks?",
     },
   ]
 

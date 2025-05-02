@@ -21,10 +21,10 @@ export function AppSidebar() {
 
   // Sample chat data - in a real app, this would come from a database
   const chatSessions = [
-    { id: "1", name: "Greeting", active: true, date: "Today" },
-    { id: "2", name: "Death by robot", active: false, date: "Today" },
-    { id: "3", name: "On mices and men", active: false, date: "Yesterday" },
-    { id: "4", name: "Essay on Silicon Valley", active: false, date: "Yesterday" },
+    { id: "1", name: "Progress on Decoded", active: true, date: "Today" },
+    { id: "2", name: "Jam's tracked time", active: false, date: "Today" },
+    { id: "3", name: "Design team overdues", active: false, date: "Yesterday" },
+    { id: "4", name: "Upcoming milestones", active: false, date: "Yesterday" },
   ]
 
   // Group chats by date
@@ -40,7 +40,7 @@ export function AppSidebar() {
     <Sidebar className="border-r">
       <SidebarHeader className="flex flex-col gap-2 px-3 py-2">
         <div className="flex items-center justify-between">
-          <h1 className="text-lg font-semibold">Chatbot</h1>
+          <h1 className="text-lg font-semibold">Lucident</h1>
           <Button variant="ghost" size="icon">
             <Plus className="h-5 w-5" />
           </Button>
