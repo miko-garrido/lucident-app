@@ -7,36 +7,47 @@ import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { ChatMessage } from "@/components/chat-message"
 import { ArrowUp, Paperclip } from "lucide-react"
+import { useUser } from "@/contexts/user-context"
+import apiClient from "@/lib/api-client"
 
 export function Chat() {
+  const { userId } = useUser()
+  const [isMounted, setIsMounted] = useState(false)
+
+  // Set user ID in API client when it changes
+  useEffect(() => {
+    if (userId) {
+      apiClient.setUserId(userId)
+    }
+  }, [userId])
+
   const { messages, input, handleInputChange, handleSubmit, isLoading, error } = useChat({
     api: "/api/chat",
     body: {
-      temperature: 0.7,
-      max_tokens: 1000,
+      userId: userId, // Pass userId to the API route
     },
   })
+
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-  const [isMounted, setIsMounted] = useState(false)
 
   // Example suggested prompts
   const suggestedPrompts = [
     {
-      title: "Deadlines",
-      subtitle: "What projects are overdue?",
+      title: "Project status",
+      subtitle: "What's the current status of our projects?",
     },
     {
-      title: "Distribution",
-      subtitle: "Who has the most tasks?",
+      title: "Team performance",
+      subtitle: "How is our team performing this month?",
     },
     {
-      title: "Standup",
-      subtitle: "How did the last 24 hours go?",
+      title: "Resource allocation",
+      subtitle: "How should we allocate resources?",
     },
     {
-      title: "Blocks",
-      subtitle: "What are current roadblocks?",
+      title: "Risk assessment",
+      subtitle: "What risks should we be aware of?",
     },
   ]
 

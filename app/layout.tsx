@@ -5,12 +5,13 @@ import "./globals.css"
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/sidebar"
 import { ThemeProvider } from "@/components/theme-provider"
+import { UserProvider } from "@/contexts/user-context"
 
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
   title: "AI Chat",
-  description: "AI chat interface built with Next.js and FastAPI",
+  description: "AI chat interface built with Next.js",
     generator: 'v0.dev'
 }
 
@@ -29,12 +30,14 @@ export default function RootLayout({
           disableTransitionOnChange
           storageKey="ai-chat-theme"
         >
-          <SidebarProvider>
-            <div className="flex h-screen w-full overflow-hidden">
-              <AppSidebar />
-              <div className="flex flex-1 flex-col overflow-hidden">{children}</div>
-            </div>
-          </SidebarProvider>
+          <UserProvider>
+            <SidebarProvider>
+              <div className="flex h-screen w-full overflow-hidden">
+                <AppSidebar />
+                <div className="flex flex-1 flex-col overflow-hidden">{children}</div>
+              </div>
+            </SidebarProvider>
+          </UserProvider>
         </ThemeProvider>
       </body>
     </html>

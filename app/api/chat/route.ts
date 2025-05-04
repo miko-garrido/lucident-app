@@ -1,5 +1,3 @@
-import { generateWithGemini } from "@/lib/google-adk"
-
 export const runtime = "nodejs"
 
 export async function POST(req: Request) {
@@ -11,35 +9,36 @@ export async function POST(req: Request) {
       return new Response("No messages provided", { status: 400 })
     }
 
-    // Get the API key from environment variables
-    const apiKey = process.env.GOOGLE_API_KEY
-
-    if (!apiKey) {
-      return new Response("Google API key not configured", { status: 500 })
-    }
-
-    // Format messages for Google's API
-    const lastMessage = messages[messages.length - 1]
-    const prompt = lastMessage.content
-
-    // Generate response using Google's Gemini model
-    const responseText = await generateWithGemini(apiKey, prompt)
-
-    // Return the response
+    // Mock response for now - will be replaced with actual API call
     return new Response(
-      JSON.stringify({
-        text: responseText,
-        id: Date.now().toString(),
-        role: "assistant",
+      new ReadableStream({
+        async start(controller) {
+          // Send a simple response
+          controller.enqueue(
+            new TextEncoder().encode(
+              `data: ${JSON.stringify({
+                text: "This is a placeholder response. The actual API integration will be implemented soon.",
+              })}\n\n`,
+            ),
+          )
+
+          // End the stream
+          controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"))
+          controller.close()
+        },
       }),
       {
         headers: {
-          "Content-Type": "application/json",
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
         },
       },
     )
   } catch (error) {
     console.error("[CHAT ERROR]", error)
-    return new Response("Error processing your request", { status: 500 })
+    return new Response(`Error processing your request: ${error instanceof Error ? error.message : String(error)}`, {
+      status: 500,
+    })
   }
 }
