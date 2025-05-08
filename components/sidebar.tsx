@@ -1,11 +1,14 @@
 "use client"
 
-import { useState } from "react"
-import { MessageSquare, Plus, MoreVertical } from "lucide-react"
+import { useState, useEffect } from "react"
+import { MessageSquare, Plus, MoreVertical, Home, Settings, Search, Inbox } from "lucide-react"
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -13,84 +16,283 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar"
 import { Button } from "@/components/ui/button"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { SettingsModal } from "@/components/settings-modal"
+import { apiClient } from "@/lib/api-client"
+import { ThemeAwareLogo } from "./theme-aware-logo"
+
+// Sample menu items
+const menuItems = [
+  {
+    title: "Home",
+    icon: Home,
+    url: "#",
+  },
+  {
+    title: "Search",
+    icon: Search,
+    url: "#",
+  },
+  {
+    title: "Settings",
+    icon: Settings,
+    url: "#",
+  },
+]
 
 export function AppSidebar() {
-  const [activeChat, setActiveChat] = useState("Progress on Decoded")
+  const [activeChat, setActiveChat] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [sessions, setSessions] = useState<Array<{ id: string; lastMessage: string; timestamp: number }>>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [mounted, setMounted] = useState(false)
 
-  // Sample chat data - in a real app, this would come from a database
-  const chatSessions = [
-    { id: "1", name: "Progress on Decoded", active: true, date: "Today" },
-    { id: "2", name: "Jam's tracked time", active: false, date: "Today" },
-    { id: "3", name: "Design team overdues", active: false, date: "Yesterday" },
-    { id: "4", name: "Upcoming milestones", active: false, date: "Yesterday" },
-  ]
+  // Set mounted state after component mounts to avoid hydration mismatch
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
-  // Group chats by date
-  const groupedChats = chatSessions.reduce((acc, chat) => {
-    if (!acc[chat.date]) {
-      acc[chat.date] = []
+  // Load sessions on mount
+  useEffect(() => {
+    if (!mounted) return
+
+    setIsLoading(true)
+    setError(null)
+
+    // Create dummy data
+    const today = new Date()
+    const yesterday = new Date(today)
+    yesterday.setDate(yesterday.getDate() - 1)
+    const thisWeek = new Date(today)
+    thisWeek.setDate(thisWeek.getDate() - 3)
+
+    const dummySessions = [
+      {
+        id: "session-1",
+        lastMessage: "Overdue Tasks",
+        timestamp: today.getTime(),
+      },
+      {
+        id: "session-2",
+        lastMessage: "Product Timeline Gaps",
+        timestamp: today.getTime() - 3600000, // 1 hour ago
+      },
+      {
+        id: "session-3",
+        lastMessage: "Brand Voice Examples",
+        timestamp: yesterday.getTime(),
+      },
+      {
+        id: "session-4",
+        lastMessage: "Export Task Comments",
+        timestamp: yesterday.getTime() - 7200000, // 2 hours ago
+      },
+      {
+        id: "session-5",
+        lastMessage: "Sync Before Standup",
+        timestamp: thisWeek.getTime(),
+      },
+      {
+        id: "session-6",
+        lastMessage: "Bug Tracker",
+        timestamp: thisWeek.getTime() - 3600000, // 1 hour after previous
+      },
+      {
+        id: "session-7",
+        lastMessage: "Revise Home Copy",
+        timestamp: thisWeek.getTime() - 7200000, // 2 hours after previous
+      },
+    ]
+
+    setSessions(dummySessions)
+
+    // Set the first session as active
+    setActiveChat("session-1")
+    apiClient.setSessionId("session-1")
+    localStorage.setItem("currentSessionId", "session-1")
+
+    setIsLoading(false)
+  }, [mounted])
+
+  // Helper function to extract the last message from a session
+  const getLastMessageFromSession = (session: any) => {
+    if (session.events && session.events.length > 0) {
+      const userEvents = session.events.filter((event: any) => event.author === "user")
+      if (userEvents.length > 0) {
+        const lastUserEvent = userEvents[userEvents.length - 1]
+        if (lastUserEvent.content?.parts?.[0]?.text) {
+          return lastUserEvent.content.parts[0].text
+        }
+      }
     }
-    acc[chat.date].push(chat)
-    return acc
-  }, {})
+    return "New conversation"
+  }
+
+  // Group sessions by date
+  const groupedSessions = sessions.reduce(
+    (acc, session) => {
+      const date = new Date(session.timestamp)
+      const today = new Date()
+      const yesterday = new Date(today)
+      yesterday.setDate(yesterday.getDate() - 1)
+
+      // Calculate the start of this week (Sunday)
+      const startOfWeek = new Date(today)
+      startOfWeek.setDate(today.getDate() - today.getDay())
+
+      let dateLabel
+      if (date.toDateString() === today.toDateString()) {
+        dateLabel = "Today"
+      } else if (date.toDateString() === yesterday.toDateString()) {
+        dateLabel = "Yesterday"
+      } else if (date >= startOfWeek) {
+        dateLabel = "This week"
+      } else {
+        dateLabel = date.toLocaleDateString()
+      }
+
+      if (!acc[dateLabel]) {
+        acc[dateLabel] = []
+      }
+      acc[dateLabel].push(session)
+      return acc
+    },
+    {} as Record<string, typeof sessions>,
+  )
+
+  // Handle session selection
+  const handleSessionSelect = (sessionId: string) => {
+    setActiveChat(sessionId)
+    apiClient.setSessionId(sessionId)
+    localStorage.setItem("currentSessionId", sessionId)
+    // Reload the page to refresh the chat
+    window.location.reload()
+  }
+
+  // Create a new session
+  const handleNewSession = async () => {
+    try {
+      const newSession = await apiClient.createSession()
+      apiClient.setSessionId(newSession.id)
+      localStorage.setItem("currentSessionId", newSession.id)
+      // Reload the page to start fresh
+      window.location.reload()
+    } catch (error) {
+      console.error("Failed to create new session:", error)
+      // Create a mock session ID as fallback
+      const mockSessionId = `mock-${Date.now()}`
+      apiClient.setSessionId(mockSessionId)
+      localStorage.setItem("currentSessionId", mockSessionId)
+      window.location.reload()
+    }
+  }
 
   return (
     <>
       <Sidebar className="border-r">
         <SidebarHeader className="flex flex-col gap-2 px-3 py-2">
           <div className="flex items-center justify-between">
-            <h1 className="text-lg font-semibold">Lucident</h1>
-            <Button variant="ghost" size="icon">
+            <div className="flex items-center px-2 py-1">{mounted && <ThemeAwareLogo className="h-6 w-auto" />}</div>
+            <Button variant="ghost" size="icon" onClick={handleNewSession}>
               <Plus className="h-5 w-5" />
             </Button>
           </div>
         </SidebarHeader>
         <SidebarContent className="overflow-y-auto px-1">
-          {Object.entries(groupedChats).map(([date, chats]) => (
-            <div key={date} className="mb-4">
-              <h2 className="mb-2 px-3 pt-2 text-xs text-muted-foreground">{date}</h2>
-              <SidebarMenu className="space-y-1.5">
-                {chats.map((chat) => (
-                  <SidebarMenuItem key={chat.id}>
-                    <SidebarMenuButton
-                      isActive={chat.name === activeChat}
-                      onClick={() => setActiveChat(chat.name)}
-                      className="group relative justify-between py-3 px-3"
-                    >
-                      <div className="flex items-center">
-                        <MessageSquare className="mr-3 h-4 w-4" />
-                        <span>{chat.name}</span>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 data-[active=true]:opacity-100"
-                      >
-                        <MoreVertical className="h-4 w-4" />
-                      </Button>
+          {/* Sample Navigation Menu */}
+          <SidebarGroup>
+            <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {menuItems.map((item) => (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild>
+                      <a href={item.url}>
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </a>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 ))}
               </SidebarMenu>
-            </div>
-          ))}
-          <div className="mt-8 px-3 text-center">
-            <p className="text-xs text-muted-foreground">You have reached the end of your chat history.</p>
-          </div>
+            </SidebarGroupContent>
+          </SidebarGroup>
+
+          {/* Chat Sessions */}
+          <SidebarGroup>
+            <SidebarGroupLabel>Recent Chats</SidebarGroupLabel>
+            <SidebarGroupContent>
+              {isLoading ? (
+                <div className="flex items-center justify-center p-4">
+                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-primary"></div>
+                  <span className="ml-2 text-sm text-muted-foreground">Loading sessions...</span>
+                </div>
+              ) : error ? (
+                <div className="p-4 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    Could not load sessions. Using a temporary session instead.
+                  </p>
+                  <Button variant="link" size="sm" onClick={handleNewSession} className="mt-2">
+                    Start new chat
+                  </Button>
+                </div>
+              ) : (
+                Object.entries(groupedSessions).map(([date, dateSessions]) => (
+                  <div key={date} className="mb-4">
+                    <h2 className="mb-2 px-3 pt-2 text-xs text-muted-foreground">{date}</h2>
+                    <SidebarMenu className="space-y-1.5">
+                      {dateSessions.map((session) => (
+                        <SidebarMenuItem key={session.id}>
+                          <SidebarMenuButton
+                            isActive={session.id === activeChat}
+                            onClick={() => handleSessionSelect(session.id)}
+                            className="group relative justify-between py-3 px-3"
+                          >
+                            <div className="flex items-center">
+                              <MessageSquare className="mr-3 h-4 w-4" />
+                              <span className="truncate">{session.lastMessage}</span>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 data-[active=true]:opacity-100"
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      ))}
+                    </SidebarMenu>
+                  </div>
+                ))
+              )}
+
+              {!isLoading && !error && sessions.length === 0 && (
+                <div className="mt-8 px-3 text-center">
+                  <p className="text-xs text-muted-foreground">No chat history yet. Start a new conversation!</p>
+                </div>
+              )}
+
+              {!isLoading && !error && sessions.length > 0 && (
+                <div className="mt-8 px-3 text-center">
+                  <p className="text-xs text-muted-foreground">You have reached the end of your chat history.</p>
+                </div>
+              )}
+            </SidebarGroupContent>
+          </SidebarGroup>
         </SidebarContent>
         <SidebarFooter className="border-t p-2">
           <div className="flex items-center justify-between">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="justify-start gap-2">
-                  <Avatar className="h-6 w-6">
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage src="/profile-image.png" alt="Miko" />
                     <AvatarFallback className="bg-purple-600 text-xs">M</AvatarFallback>
                   </Avatar>
-                  <span className="truncate text-sm">miko+test1@dorxata.com</span>
+                  <span className="truncate text-sm">miko@lucident.ai</span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-[200px]">

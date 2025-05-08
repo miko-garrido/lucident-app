@@ -1,7 +1,8 @@
-import { Chat } from "@/components/chat"
+import { MockChat } from "@/components/mock-chat"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { PanelLeft } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { ThemeAwareLogo } from "@/components/theme-aware-logo"
 
 export default function HomePage() {
   return (
@@ -11,11 +12,14 @@ export default function HomePage() {
           <SidebarTrigger className="mr-2">
             <PanelLeft className="h-5 w-5" />
           </SidebarTrigger>
+          <div className="md:hidden">
+            <ThemeAwareLogo className="h-5 w-auto" />
+          </div>
         </div>
         <ThemeToggle />
       </header>
       <main className="flex flex-1 flex-col overflow-hidden">
-        <Chat />
+        <MockChat />
       </main>
     </div>
   )

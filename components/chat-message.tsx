@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils"
+import ReactMarkdown from "react-markdown"
 
 interface ChatMessageProps {
   message: {
@@ -10,21 +11,21 @@ interface ChatMessageProps {
 }
 
 export function ChatMessage({ message, isLoading = false }: ChatMessageProps) {
+  const isUser = message.role === "user"
+
   return (
-    <div className="flex flex-col space-y-1.5">
-      {message.role === "user" ? (
-        <div className="font-semibold">You</div>
-      ) : (
-        <div className="font-semibold">Assistant</div>
-      )}
+    <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
       <div
         className={cn(
-          "prose dark:prose-invert max-w-none",
+          isUser
+            ? "max-w-[60%] w-fit bg-secondary text-secondary-foreground rounded-2xl px-4 py-3"
+            : "max-w-[80%] text-foreground",
           isLoading && "animate-pulse",
-          message.role === "assistant" ? "text-foreground" : "text-muted-foreground",
         )}
       >
-        {message.content}
+        <div className="prose dark:prose-invert max-w-none">
+          <ReactMarkdown>{message.content}</ReactMarkdown>
+        </div>
       </div>
     </div>
   )

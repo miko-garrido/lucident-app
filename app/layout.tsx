@@ -1,16 +1,21 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { Inter } from "next/font/google"
+import { DM_Sans } from "next/font/google"
 import "./globals.css"
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/sidebar"
 import { ThemeProvider } from "@/components/theme-provider"
 import { UserProvider } from "@/contexts/user-context"
 
-const inter = Inter({ subsets: ["latin"] })
+// Load DM Sans font with all weights
+const dmSans = DM_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-dm-sans",
+})
 
 export const metadata: Metadata = {
-  title: "AI Chat",
+  title: "Lucident",
   description: "AI chat interface built with Next.js",
     generator: 'v0.dev'
 }
@@ -22,7 +27,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={inter.className}>
+      <body className={dmSans.className}>
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"
