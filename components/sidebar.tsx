@@ -67,13 +67,31 @@ export function AppSidebar() {
     // Update the loadSessions function in the useEffect
     const loadSessions = async () => {
       try {
+        // Check if there's a session ID in localStorage
+        const savedSessionId = localStorage.getItem("currentSessionId")
+
+        if (savedSessionId) {
+          // Try to get the session details
+          const session = await apiClient.getSession(savedSessionId)
+
+          if (session) {
+            // Session exists, we can use it
+            apiClient.setSessionId(savedSessionId)
+            setActiveChat(savedSessionId)
+          } else {
+            // Session doesn't exist, remove from localStorage
+            localStorage.removeItem("currentSessionId")
+          }
+        }
+
+        // List available sessions
         const sessionList = await apiClient.listSessions()
 
         if (sessionList && sessionList.length > 0) {
           // Transform the sessions into the format we need
           const formattedSessions = sessionList.map((session) => ({
             id: session.id,
-            name: session.state.session_name || "New conversation",
+            name: session.state?.session_name || "New conversation",
             lastMessage: getLastMessageFromSession(session) || "New conversation",
             timestamp: session.last_update_time || Date.now(),
           }))
@@ -86,8 +104,8 @@ export function AppSidebar() {
             apiClient.setSessionId(formattedSessions[0].id)
             localStorage.setItem("currentSessionId", formattedSessions[0].id)
           }
-        } else {
-          // If no sessions exist, create a new one
+        } else if (!activeChat) {
+          // If no sessions exist and no active chat, create a new one
           const newSession = await apiClient.createSession()
           apiClient.setSessionId(newSession.id)
           localStorage.setItem("currentSessionId", newSession.id)
@@ -95,7 +113,7 @@ export function AppSidebar() {
           setSessions([
             {
               id: newSession.id,
-              name: newSession.state.session_name || "New conversation",
+              name: newSession.state?.session_name || "New conversation",
               lastMessage: "New conversation",
               timestamp: Date.now(),
             },
@@ -119,7 +137,7 @@ export function AppSidebar() {
           setSessions([
             {
               id: newSession.id,
-              name: newSession.state.session_name || "New conversation",
+              name: newSession.state?.session_name || "New conversation",
               lastMessage: "New conversation",
               timestamp: Date.now(),
             },
@@ -132,23 +150,16 @@ export function AppSidebar() {
       }
     }
 
-    // Check if there's a session ID in localStorage
-    const savedSessionId = localStorage.getItem("currentSessionId")
-    if (savedSessionId) {
-      setActiveChat(savedSessionId)
-      apiClient.setSessionId(savedSessionId)
-    }
-
     loadSessions()
-  }, [mounted])
+  }, [mounted, activeChat])
 
   // Helper function to extract the last message from a session
   const getLastMessageFromSession = (session: any) => {
-    if (session.events && session.events.length > 0) {
+    if (session?.events && Array.isArray(session.events) && session.events.length > 0) {
       const userEvents = session.events.filter((event: any) => event.author === "user")
       if (userEvents.length > 0) {
         const lastUserEvent = userEvents[userEvents.length - 1]
-        if (lastUserEvent.content?.parts?.[0]?.text) {
+        if (lastUserEvent?.content?.parts?.[0]?.text) {
           return lastUserEvent.content.parts[0].text
         }
       }
@@ -202,6 +213,11 @@ export function AppSidebar() {
     try {
       setIsLoading(true)
       const newSession = await apiClient.createSession("New session")
+
+      if (!newSession || !newSession.id) {
+        throw new Error("Failed to create session: Invalid response")
+      }
+
       apiClient.setSessionId(newSession.id)
       localStorage.setItem("currentSessionId", newSession.id)
 
@@ -209,7 +225,7 @@ export function AppSidebar() {
       setSessions((prev) => [
         {
           id: newSession.id,
-          name: newSession.state.session_name || "New conversation",
+          name: newSession.state?.session_name || "New conversation",
           lastMessage: "New conversation",
           timestamp: Date.now(),
         },

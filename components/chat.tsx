@@ -63,15 +63,15 @@ export function Chat() {
           const savedSessionId = localStorage.getItem("currentSessionId")
 
           if (savedSessionId) {
-            // Use the saved session
-            apiClient.setSessionId(savedSessionId)
-
             // Try to get the session details
-            try {
-              const session = await apiClient.getSession(savedSessionId)
+            const session = await apiClient.getSession(savedSessionId)
+
+            if (session) {
               // Session exists, we can use it
-            } catch (e) {
-              // Session doesn't exist or error occurred, create a new one
+              apiClient.setSessionId(savedSessionId)
+            } else {
+              // Session doesn't exist, remove from localStorage and create a new one
+              localStorage.removeItem("currentSessionId")
               const newSession = await apiClient.createSession()
               apiClient.setSessionId(newSession.id)
               localStorage.setItem("currentSessionId", newSession.id)
@@ -112,9 +112,9 @@ export function Chat() {
 
   // Helper function to extract the last message from a session
   const getLastMessageFromSession = (session: any) => {
-    if (session.events && session.events.length > 0) {
+    if (session?.events && Array.isArray(session.events) && session.events.length > 0) {
       const lastEvent = session.events[session.events.length - 1]
-      if (lastEvent.content?.parts?.[0]?.text) {
+      if (lastEvent?.content?.parts?.[0]?.text) {
         return lastEvent.content.parts[0].text
       }
     }
@@ -131,60 +131,6 @@ export function Chat() {
     }
   }, [messages])
 
-  // Remove the dummy conversation data effect
-  // Delete or comment out the following useEffect:
-  // useEffect(() => {
-  //   if (!isMounted) return
-
-  //   // Override the messages with dummy data
-  //   const dummyMessages = [
-  //     {
-  //       id: "user-1",
-  //       role: "user",
-  //       content: "Which projects managed by Kai have overdue tasks?",
-  //     },
-  //     {
-  //       id: "assistant-1",
-  //       role: "assistant",
-  //       content:
-  //         "3 projects managed by Kai have overdue tasks:\n- Orbit redesign (2 tasks overdue)\n- Zenith form migration (1 task overdue)\n- GoodPeople A/B testing (5 tasks overdue, 2 blocked by review)",
-  //     },
-  //     {
-  //       id: "user-2",
-  //       role: "user",
-  //       content: "What was Kelly's latest feedback in Slack for the Orbit redesign?",
-  //     },
-  //     {
-  //       id: "assistant-2",
-  //       role: "assistant",
-  //       content:
-  //         'Kelly yesterday at 2:43 PM: "Feels closer to our brand. That said, content will likely be longer — let\'s explore more layout options?"',
-  //     },
-  //     {
-  //       id: "user-3",
-  //       role: "user",
-  //       content: "Thanks - set a 15-min invite today that works for me, Kai, and the assigned designer.",
-  //     },
-  //     {
-  //       id: "assistant-3",
-  //       role: "assistant",
-  //       content: "Scheduled for today at 4:30 PM. Invite sent to you, Kai, and Ana (designer).",
-  //     },
-  //   ]
-
-  //   // Use a custom method to override the messages
-  //   // This is a workaround since useChat doesn't provide a direct way to set initial messages
-  //   const chatContainer = document.querySelector("[data-chat-messages]")
-  //   if (chatContainer && messages.length === 0) {
-  //     // Only inject if there are no messages yet
-  //     setTimeout(() => {
-  //       if (setMessages) {
-  //         setMessages(dummyMessages)
-  //       }
-  //     }, 100)
-  //   }
-  // }, [isMounted, messages.length, setMessages])
-
   const handlePromptClick = (prompt: string) => {
     const fullPrompt = prompt.replace("\n", " ")
     handleSubmit(new Event("submit") as any, { prompt: fullPrompt })
@@ -195,6 +141,7 @@ export function Chat() {
     try {
       const newSession = await apiClient.createSession()
       apiClient.setSessionId(newSession.id)
+      localStorage.setItem("currentSessionId", newSession.id)
       // Reset the chat UI
       window.location.reload()
     } catch (error) {
@@ -205,7 +152,7 @@ export function Chat() {
   return (
     <div className="flex h-full flex-col items-center">
       <div className="flex w-full max-w-3xl flex-1 flex-col px-4">
-        <ScrollArea ref={scrollAreaRef} className="flex-1 py-6" viewportClassName="h-full">
+        <ScrollArea ref={scrollAreaRef} className="flex-1 py-6">
           <div className="space-y-6 pb-20" data-chat-messages>
             {messages.length === 0 ? (
               <div className="flex min-h-[30vh] flex-col items-start justify-center space-y-2">
