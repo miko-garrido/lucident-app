@@ -12,9 +12,6 @@ import { apiClient } from "@/lib/api-client"
 export function Chat() {
   const { messages, input, handleInputChange, handleSubmit, isLoading, error, setMessages } = useChat({
     api: "/api/chat",
-    body: {
-      // Remove any OpenAI-specific options like temperature, max_tokens, etc.
-    },
     onResponse: (response) => {
       // You can handle the response here if needed
       console.log("Chat response received")
@@ -53,29 +50,59 @@ export function Chat() {
   useEffect(() => {
     if (!isMounted) {
       setIsMounted(true)
-      inputRef.current?.focus()
+
+      // Focus on the input field
+      setTimeout(() => {
+        inputRef.current?.focus()
+      }, 100)
 
       // Initialize a session or load existing sessions
       const initializeSession = async () => {
         try {
-          const sessionList = await apiClient.listSessions()
-          if (sessionList.length > 0) {
-            // Use the most recent session
-            const latestSession = sessionList[0]
-            apiClient.setSessionId(latestSession.id)
-            setSessions(
-              sessionList.map((session) => ({
-                id: session.id,
-                lastMessage: getLastMessageFromSession(session),
-              })),
-            )
+          // Check if there's a session ID in localStorage
+          const savedSessionId = localStorage.getItem("currentSessionId")
+
+          if (savedSessionId) {
+            // Use the saved session
+            apiClient.setSessionId(savedSessionId)
+
+            // Try to get the session details
+            try {
+              const session = await apiClient.getSession(savedSessionId)
+              // Session exists, we can use it
+            } catch (e) {
+              // Session doesn't exist or error occurred, create a new one
+              const newSession = await apiClient.createSession()
+              apiClient.setSessionId(newSession.id)
+              localStorage.setItem("currentSessionId", newSession.id)
+            }
           } else {
-            // Create a new session
-            const newSession = await apiClient.createSession()
-            apiClient.setSessionId(newSession.id)
+            // No saved session, list available sessions
+            const sessionList = await apiClient.listSessions()
+
+            if (sessionList.length > 0) {
+              // Use the most recent session
+              const latestSession = sessionList[0]
+              apiClient.setSessionId(latestSession.id)
+              localStorage.setItem("currentSessionId", latestSession.id)
+            } else {
+              // Create a new session
+              const newSession = await apiClient.createSession()
+              apiClient.setSessionId(newSession.id)
+              localStorage.setItem("currentSessionId", newSession.id)
+            }
           }
         } catch (error) {
           console.error("Failed to initialize session:", error)
+
+          // Create a new session as fallback
+          try {
+            const newSession = await apiClient.createSession()
+            apiClient.setSessionId(newSession.id)
+            localStorage.setItem("currentSessionId", newSession.id)
+          } catch (e) {
+            console.error("Failed to create fallback session:", e)
+          }
         }
       }
 
@@ -104,58 +131,59 @@ export function Chat() {
     }
   }, [messages])
 
-  // Set up dummy conversation data
-  useEffect(() => {
-    if (!isMounted) return
+  // Remove the dummy conversation data effect
+  // Delete or comment out the following useEffect:
+  // useEffect(() => {
+  //   if (!isMounted) return
 
-    // Override the messages with dummy data
-    const dummyMessages = [
-      {
-        id: "user-1",
-        role: "user",
-        content: "Which projects managed by Kai have overdue tasks?",
-      },
-      {
-        id: "assistant-1",
-        role: "assistant",
-        content:
-          "3 projects managed by Kai have overdue tasks:\n- Orbit redesign (2 tasks overdue)\n- Zenith form migration (1 task overdue)\n- GoodPeople A/B testing (5 tasks overdue, 2 blocked by review)",
-      },
-      {
-        id: "user-2",
-        role: "user",
-        content: "What was Kelly's latest feedback in Slack for the Orbit redesign?",
-      },
-      {
-        id: "assistant-2",
-        role: "assistant",
-        content:
-          'Kelly yesterday at 2:43 PM: "Feels closer to our brand. That said, content will likely be longer — let\'s explore more layout options?"',
-      },
-      {
-        id: "user-3",
-        role: "user",
-        content: "Thanks - set a 15-min invite today that works for me, Kai, and the assigned designer.",
-      },
-      {
-        id: "assistant-3",
-        role: "assistant",
-        content: "Scheduled for today at 4:30 PM. Invite sent to you, Kai, and Ana (designer).",
-      },
-    ]
+  //   // Override the messages with dummy data
+  //   const dummyMessages = [
+  //     {
+  //       id: "user-1",
+  //       role: "user",
+  //       content: "Which projects managed by Kai have overdue tasks?",
+  //     },
+  //     {
+  //       id: "assistant-1",
+  //       role: "assistant",
+  //       content:
+  //         "3 projects managed by Kai have overdue tasks:\n- Orbit redesign (2 tasks overdue)\n- Zenith form migration (1 task overdue)\n- GoodPeople A/B testing (5 tasks overdue, 2 blocked by review)",
+  //     },
+  //     {
+  //       id: "user-2",
+  //       role: "user",
+  //       content: "What was Kelly's latest feedback in Slack for the Orbit redesign?",
+  //     },
+  //     {
+  //       id: "assistant-2",
+  //       role: "assistant",
+  //       content:
+  //         'Kelly yesterday at 2:43 PM: "Feels closer to our brand. That said, content will likely be longer — let\'s explore more layout options?"',
+  //     },
+  //     {
+  //       id: "user-3",
+  //       role: "user",
+  //       content: "Thanks - set a 15-min invite today that works for me, Kai, and the assigned designer.",
+  //     },
+  //     {
+  //       id: "assistant-3",
+  //       role: "assistant",
+  //       content: "Scheduled for today at 4:30 PM. Invite sent to you, Kai, and Ana (designer).",
+  //     },
+  //   ]
 
-    // Use a custom method to override the messages
-    // This is a workaround since useChat doesn't provide a direct way to set initial messages
-    const chatContainer = document.querySelector("[data-chat-messages]")
-    if (chatContainer && messages.length === 0) {
-      // Only inject if there are no messages yet
-      setTimeout(() => {
-        if (setMessages) {
-          setMessages(dummyMessages)
-        }
-      }, 100)
-    }
-  }, [isMounted, messages.length, setMessages])
+  //   // Use a custom method to override the messages
+  //   // This is a workaround since useChat doesn't provide a direct way to set initial messages
+  //   const chatContainer = document.querySelector("[data-chat-messages]")
+  //   if (chatContainer && messages.length === 0) {
+  //     // Only inject if there are no messages yet
+  //     setTimeout(() => {
+  //       if (setMessages) {
+  //         setMessages(dummyMessages)
+  //       }
+  //     }, 100)
+  //   }
+  // }, [isMounted, messages.length, setMessages])
 
   const handlePromptClick = (prompt: string) => {
     const fullPrompt = prompt.replace("\n", " ")

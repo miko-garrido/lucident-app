@@ -15,7 +15,10 @@ export interface Session {
   id: string
   app_name: string
   user_id: string
-  state: Record<string, any>
+  state: {
+    session_name?: string
+    [key: string]: any
+  }
   events: Event[]
   last_update_time: number
 }
@@ -51,7 +54,7 @@ class ApiClient {
   private baseUrl: string
   private sessionId: string | null = null
 
-  constructor(baseUrl = "/api") {
+  constructor(baseUrl = "https://lucident-service-377871059238.us-central1.run.app") {
     this.baseUrl = baseUrl
   }
 
@@ -90,14 +93,16 @@ class ApiClient {
   }
 
   // Session management
-  async createSession(): Promise<Session> {
+  async createSession(sessionName = "New session"): Promise<Session> {
     try {
       const response = await fetch(`${this.baseUrl}/apps/${APP_NAME}/users/${USER_ID}/sessions`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({}),
+        body: JSON.stringify({
+          session_name: sessionName,
+        }),
       })
 
       return this.handleResponse<Session>(response, "Failed to create session")
@@ -110,7 +115,9 @@ class ApiClient {
         id: mockSessionId,
         app_name: APP_NAME,
         user_id: USER_ID,
-        state: {},
+        state: {
+          session_name: sessionName,
+        },
         events: [],
         last_update_time: Date.now(),
       }

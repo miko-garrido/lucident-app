@@ -28,29 +28,10 @@ export async function POST(req: Request) {
         apiClient.setSessionId(sessionId)
       } catch (error) {
         console.error("Failed to create session:", error)
-        // Return a mock response if we can't create a session
-        return new Response(
-          new ReadableStream({
-            start(controller) {
-              controller.enqueue(
-                new TextEncoder().encode(
-                  `data: ${JSON.stringify({
-                    text: "I'm having trouble connecting to the server. Please try again later.",
-                  })}\n\n`,
-                ),
-              )
-              controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"))
-              controller.close()
-            },
-          }),
-          {
-            headers: {
-              "Content-Type": "text/event-stream",
-              "Cache-Control": "no-cache",
-              Connection: "keep-alive",
-            },
-          },
-        )
+        return new Response(JSON.stringify({ error: "Failed to create session" }), {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        })
       }
     }
 

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { MessageSquare, Plus, MoreVertical, Home, Settings, Search, Inbox } from "lucide-react"
+import { MessageSquare, Plus, MoreVertical, Home, Settings, Search } from "lucide-react"
 import {
   Sidebar,
   SidebarContent,
@@ -44,7 +44,10 @@ const menuItems = [
 export function AppSidebar() {
   const [activeChat, setActiveChat] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [sessions, setSessions] = useState<Array<{ id: string; lastMessage: string; timestamp: number }>>([])
+  // Update the sessions state to include session name
+  const [sessions, setSessions] = useState<Array<{ id: string; name: string; lastMessage: string; timestamp: number }>>(
+    [],
+  )
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
@@ -61,59 +64,82 @@ export function AppSidebar() {
     setIsLoading(true)
     setError(null)
 
-    // Create dummy data
-    const today = new Date()
-    const yesterday = new Date(today)
-    yesterday.setDate(yesterday.getDate() - 1)
-    const thisWeek = new Date(today)
-    thisWeek.setDate(thisWeek.getDate() - 3)
+    // Update the loadSessions function in the useEffect
+    const loadSessions = async () => {
+      try {
+        const sessionList = await apiClient.listSessions()
 
-    const dummySessions = [
-      {
-        id: "session-1",
-        lastMessage: "Overdue Tasks",
-        timestamp: today.getTime(),
-      },
-      {
-        id: "session-2",
-        lastMessage: "Product Timeline Gaps",
-        timestamp: today.getTime() - 3600000, // 1 hour ago
-      },
-      {
-        id: "session-3",
-        lastMessage: "Brand Voice Examples",
-        timestamp: yesterday.getTime(),
-      },
-      {
-        id: "session-4",
-        lastMessage: "Export Task Comments",
-        timestamp: yesterday.getTime() - 7200000, // 2 hours ago
-      },
-      {
-        id: "session-5",
-        lastMessage: "Sync Before Standup",
-        timestamp: thisWeek.getTime(),
-      },
-      {
-        id: "session-6",
-        lastMessage: "Bug Tracker",
-        timestamp: thisWeek.getTime() - 3600000, // 1 hour after previous
-      },
-      {
-        id: "session-7",
-        lastMessage: "Revise Home Copy",
-        timestamp: thisWeek.getTime() - 7200000, // 2 hours after previous
-      },
-    ]
+        if (sessionList && sessionList.length > 0) {
+          // Transform the sessions into the format we need
+          const formattedSessions = sessionList.map((session) => ({
+            id: session.id,
+            name: session.state.session_name || "New conversation",
+            lastMessage: getLastMessageFromSession(session) || "New conversation",
+            timestamp: session.last_update_time || Date.now(),
+          }))
 
-    setSessions(dummySessions)
+          setSessions(formattedSessions)
 
-    // Set the first session as active
-    setActiveChat("session-1")
-    apiClient.setSessionId("session-1")
-    localStorage.setItem("currentSessionId", "session-1")
+          // Set the first session as active if none is selected
+          if (!activeChat && formattedSessions.length > 0) {
+            setActiveChat(formattedSessions[0].id)
+            apiClient.setSessionId(formattedSessions[0].id)
+            localStorage.setItem("currentSessionId", formattedSessions[0].id)
+          }
+        } else {
+          // If no sessions exist, create a new one
+          const newSession = await apiClient.createSession()
+          apiClient.setSessionId(newSession.id)
+          localStorage.setItem("currentSessionId", newSession.id)
 
-    setIsLoading(false)
+          setSessions([
+            {
+              id: newSession.id,
+              name: newSession.state.session_name || "New conversation",
+              lastMessage: "New conversation",
+              timestamp: Date.now(),
+            },
+          ])
+
+          setActiveChat(newSession.id)
+        }
+
+        setIsLoading(false)
+      } catch (error) {
+        console.error("Error loading sessions:", error)
+        setError("Failed to load sessions")
+        setIsLoading(false)
+
+        // Fallback to a new session
+        try {
+          const newSession = await apiClient.createSession()
+          apiClient.setSessionId(newSession.id)
+          localStorage.setItem("currentSessionId", newSession.id)
+
+          setSessions([
+            {
+              id: newSession.id,
+              name: newSession.state.session_name || "New conversation",
+              lastMessage: "New conversation",
+              timestamp: Date.now(),
+            },
+          ])
+
+          setActiveChat(newSession.id)
+        } catch (e) {
+          console.error("Failed to create fallback session:", e)
+        }
+      }
+    }
+
+    // Check if there's a session ID in localStorage
+    const savedSessionId = localStorage.getItem("currentSessionId")
+    if (savedSessionId) {
+      setActiveChat(savedSessionId)
+      apiClient.setSessionId(savedSessionId)
+    }
+
+    loadSessions()
   }, [mounted])
 
   // Helper function to extract the last message from a session
@@ -171,16 +197,34 @@ export function AppSidebar() {
     window.location.reload()
   }
 
-  // Create a new session
+  // Update the handleNewSession function
   const handleNewSession = async () => {
     try {
-      const newSession = await apiClient.createSession()
+      setIsLoading(true)
+      const newSession = await apiClient.createSession("New session")
       apiClient.setSessionId(newSession.id)
       localStorage.setItem("currentSessionId", newSession.id)
-      // Reload the page to start fresh
+
+      // Add the new session to the list
+      setSessions((prev) => [
+        {
+          id: newSession.id,
+          name: newSession.state.session_name || "New conversation",
+          lastMessage: "New conversation",
+          timestamp: Date.now(),
+        },
+        ...prev,
+      ])
+
+      setActiveChat(newSession.id)
+      setIsLoading(false)
+
+      // Reload the page to refresh the chat and focus on input
       window.location.reload()
     } catch (error) {
       console.error("Failed to create new session:", error)
+      setIsLoading(false)
+
       // Create a mock session ID as fallback
       const mockSessionId = `mock-${Date.now()}`
       apiClient.setSessionId(mockSessionId)
@@ -195,8 +239,9 @@ export function AppSidebar() {
         <SidebarHeader className="flex flex-col gap-2 px-3 py-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center px-2 py-1">{mounted && <ThemeAwareLogo className="h-6 w-auto" />}</div>
-            <Button variant="ghost" size="icon" onClick={handleNewSession}>
+            <Button variant="ghost" size="icon" onClick={handleNewSession} disabled={isLoading} title="New chat">
               <Plus className="h-5 w-5" />
+              <span className="sr-only">New chat</span>
             </Button>
           </div>
         </SidebarHeader>
@@ -252,7 +297,7 @@ export function AppSidebar() {
                           >
                             <div className="flex items-center">
                               <MessageSquare className="mr-3 h-4 w-4" />
-                              <span className="truncate">{session.lastMessage}</span>
+                              <span className="truncate">{session.name || "New conversation"}</span>
                             </div>
                             <Button
                               variant="ghost"
