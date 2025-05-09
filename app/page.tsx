@@ -1,4 +1,4 @@
-import { Chat } from "@/components/chat"
+import { MockChat } from "@/components/mock-chat"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { PanelLeft } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
@@ -19,7 +19,7 @@ export default function HomePage() {
         <ThemeToggle />
       </header>
       <main className="flex flex-1 flex-col overflow-hidden">
-        <Chat />
+        <MockChat />
       </main>
     </div>
   )

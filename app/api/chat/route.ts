@@ -22,45 +22,35 @@ export async function POST(req: Request) {
     let sessionId = apiClient.getSessionId()
 
     if (!sessionId) {
-      console.log("No session ID found, creating a new session")
       try {
-        const newSession = await apiClient.createSession()
-        if (!newSession || !newSession.id) {
-          throw new Error("Invalid session response")
-        }
-        sessionId = newSession.id
+        const session = await apiClient.createSession()
+        sessionId = session.id
         apiClient.setSessionId(sessionId)
       } catch (error) {
         console.error("Failed to create session:", error)
-        return new Response(JSON.stringify({ error: "Failed to create session" }), {
-          status: 500,
-          headers: { "Content-Type": "application/json" },
-        })
-      }
-    } else {
-      // Verify the session exists
-      try {
-        const session = await apiClient.getSession(sessionId)
-        if (!session) {
-          console.log("Session not found, creating a new one")
-          const newSession = await apiClient.createSession()
-          sessionId = newSession.id
-          apiClient.setSessionId(sessionId)
-        }
-      } catch (error) {
-        console.error("Error verifying session:", error)
-        // Create a new session as fallback
-        try {
-          const newSession = await apiClient.createSession()
-          sessionId = newSession.id
-          apiClient.setSessionId(sessionId)
-        } catch (e) {
-          console.error("Failed to create fallback session:", e)
-          return new Response(JSON.stringify({ error: "Failed to create session" }), {
-            status: 500,
-            headers: { "Content-Type": "application/json" },
-          })
-        }
+        // Return a mock response if we can't create a session
+        return new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(
+                new TextEncoder().encode(
+                  `data: ${JSON.stringify({
+                    text: "I'm having trouble connecting to the server. Please try again later.",
+                  })}\n\n`,
+                ),
+              )
+              controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"))
+              controller.close()
+            },
+          }),
+          {
+            headers: {
+              "Content-Type": "text/event-stream",
+              "Cache-Control": "no-cache",
+              Connection: "keep-alive",
+            },
+          },
+        )
       }
     }
 
