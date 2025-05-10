@@ -126,6 +126,9 @@ export function ChatMessage({message, isLoading = false}: ChatMessageProps) {
     }
   }
 
+  // ToDo: remove this once we have UX ready for this
+  if (isFunctionCall || isFunctionResponse) return <></>;
+
   if (isFunctionCall) {
     return (
       <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
