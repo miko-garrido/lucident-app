@@ -45,7 +45,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         </div>
         <ThemeToggle />
       </header>
-      <main className="flex flex-1 flex-col overflow-auto">
+      <main className="flex flex-1 flex-col overflow-auto" id="main-content">
         <Chat sessionId={sessionId} />
       </main>
     </div>

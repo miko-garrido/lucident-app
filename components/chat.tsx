@@ -44,6 +44,7 @@ export function Chat({ sessionId }: ChatProps) {
 
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Example suggested prompts
   const suggestedPrompts = [
@@ -103,14 +104,33 @@ export function Chat({ sessionId }: ChatProps) {
     }
   }, [storedSession]);
 
-  // Scroll to bottom when messages change
+  // Scroll to bottom when messages change or content updates
   useEffect(() => {
-    if (scrollAreaRef.current) {
-      scrollAreaRef.current.scrollTo({
-        top: scrollAreaRef.current.scrollHeight,
-        behavior: "smooth",
+    const element = document.getElementById('main-content');
+    const scrollToBottom = () => {
+      if (element) {
+        element.scrollTo({
+          top: element.scrollHeight,
+          behavior: "smooth",
+        })
+      }
+    }
+
+    // Create a MutationObserver to watch for content changes
+    const observer = new MutationObserver(scrollToBottom)
+
+    if (element) {
+      observer.observe(element, {
+        childList: true,
+        subtree: true,
+        characterData: true,
       })
     }
+
+    // Initial scroll
+    scrollToBottom()
+
+    return () => observer.disconnect()
   }, [messages])
 
   const handlePromptClick = async (prompt: string) => {
