@@ -1,4 +1,4 @@
-import type React from "react"
+import React, {Suspense} from "react"
 import type { Metadata } from "next"
 import { DM_Sans } from "next/font/google"
 import "./globals.css"
@@ -40,7 +40,9 @@ export default function RootLayout({
             <UserProvider>
               <SidebarProvider>
                 <div className="flex h-screen w-full overflow-hidden">
-                  <AppSidebar />
+                  <Suspense>
+                    <AppSidebar />
+                  </Suspense>
                   <div className="flex flex-1 flex-col overflow-hidden">{children}</div>
                 </div>
               </SidebarProvider>
