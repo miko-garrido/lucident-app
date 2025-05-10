@@ -1,7 +1,9 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { MessageSquare, Plus, MoreVertical, Home, Settings, Search, Inbox } from "lucide-react"
+import {ThemeAwareLogo} from '@/components/theme-aware-logo';
+import {useEffect, useState} from "react"
+import { MessageSquare, Plus, MoreVertical, Home, Settings, Search, Trash2 } from "lucide-react"
+import { useSearchParams, useRouter } from "next/navigation"
 import {
   Sidebar,
   SidebarContent,
@@ -18,9 +20,9 @@ import {
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { SettingsModal } from "@/components/settings-modal"
-import { apiClient } from "@/lib/api-client"
-import { ThemeAwareLogo } from "./theme-aware-logo"
+import { useSession } from "@/lib/session-context"
 
 // Sample menu items
 const menuItems = [
@@ -41,99 +43,31 @@ const menuItems = [
   },
 ]
 
+const defaultConversationName = "New conversation"
+
 export function AppSidebar() {
-  const [activeChat, setActiveChat] = useState<string | null>(null)
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const currentSessionId = searchParams.get('session') as string | undefined
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [sessions, setSessions] = useState<Array<{ id: string; lastMessage: string; timestamp: number }>>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [mounted, setMounted] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [sessionToDelete, setSessionToDelete] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
-  // Set mounted state after component mounts to avoid hydration mismatch
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  // Load sessions on mount
-  useEffect(() => {
-    if (!mounted) return
-
-    setIsLoading(true)
-    setError(null)
-
-    // Create dummy data
-    const today = new Date()
-    const yesterday = new Date(today)
-    yesterday.setDate(yesterday.getDate() - 1)
-    const thisWeek = new Date(today)
-    thisWeek.setDate(thisWeek.getDate() - 3)
-
-    const dummySessions = [
-      {
-        id: "session-1",
-        lastMessage: "Overdue Tasks",
-        timestamp: today.getTime(),
-      },
-      {
-        id: "session-2",
-        lastMessage: "Product Timeline Gaps",
-        timestamp: today.getTime() - 3600000, // 1 hour ago
-      },
-      {
-        id: "session-3",
-        lastMessage: "Brand Voice Examples",
-        timestamp: yesterday.getTime(),
-      },
-      {
-        id: "session-4",
-        lastMessage: "Export Task Comments",
-        timestamp: yesterday.getTime() - 7200000, // 2 hours ago
-      },
-      {
-        id: "session-5",
-        lastMessage: "Sync Before Standup",
-        timestamp: thisWeek.getTime(),
-      },
-      {
-        id: "session-6",
-        lastMessage: "Bug Tracker",
-        timestamp: thisWeek.getTime() - 3600000, // 1 hour after previous
-      },
-      {
-        id: "session-7",
-        lastMessage: "Revise Home Copy",
-        timestamp: thisWeek.getTime() - 7200000, // 2 hours after previous
-      },
-    ]
-
-    setSessions(dummySessions)
-
-    // Set the first session as active
-    setActiveChat("session-1")
-    apiClient.setSessionId("session-1")
-    localStorage.setItem("currentSessionId", "session-1")
-
-    setIsLoading(false)
-  }, [mounted])
-
-  // Helper function to extract the last message from a session
-  const getLastMessageFromSession = (session: any) => {
-    if (session.events && session.events.length > 0) {
-      const userEvents = session.events.filter((event: any) => event.author === "user")
-      if (userEvents.length > 0) {
-        const lastUserEvent = userEvents[userEvents.length - 1]
-        if (lastUserEvent.content?.parts?.[0]?.text) {
-          return lastUserEvent.content.parts[0].text
-        }
-      }
-    }
-    return "New conversation"
-  }
+  const {
+    sessions,
+    isLoading,
+    error,
+    activeSession,
+    setActiveSession,
+    createSession,
+    deleteSession,
+  } = useSession()
 
   // Group sessions by date
   const groupedSessions = sessions.reduce(
     (acc, session) => {
-      const date = new Date(session.timestamp)
+      const date = new Date(session.timestamp * 1000)
       const today = new Date()
       const yesterday = new Date(today)
       yesterday.setDate(yesterday.getDate() - 1)
@@ -162,30 +96,38 @@ export function AppSidebar() {
     {} as Record<string, typeof sessions>,
   )
 
+  useEffect(()=> {
+    setActiveSession(currentSessionId || sessions[0]?.id || "")
+  }, [currentSessionId])
   // Handle session selection
   const handleSessionSelect = (sessionId: string) => {
-    setActiveChat(sessionId)
-    apiClient.setSessionId(sessionId)
-    localStorage.setItem("currentSessionId", sessionId)
-    // Reload the page to refresh the chat
-    window.location.reload()
+    setActiveSession(sessionId)
+    router.push(`/?session=${sessionId}`)
   }
 
-  // Create a new session
+  // Handle new session creation
   const handleNewSession = async () => {
     try {
-      const newSession = await apiClient.createSession()
-      apiClient.setSessionId(newSession.id)
-      localStorage.setItem("currentSessionId", newSession.id)
-      // Reload the page to start fresh
-      window.location.reload()
+      const newSession = await createSession()
+      router.push(`/?session=${newSession.id}`)
     } catch (error) {
       console.error("Failed to create new session:", error)
-      // Create a mock session ID as fallback
-      const mockSessionId = `mock-${Date.now()}`
-      apiClient.setSessionId(mockSessionId)
-      localStorage.setItem("currentSessionId", mockSessionId)
-      window.location.reload()
+    }
+  }
+
+  // Handle session deletion
+  const handleDeleteSession = async () => {
+    if (!sessionToDelete) return
+
+    try {
+      setIsDeleting(true)
+      await deleteSession(sessionToDelete)
+    } catch (error) {
+      console.error("Failed to delete session:", error)
+    } finally {
+      setIsDeleting(false)
+      setDeleteDialogOpen(false)
+      setSessionToDelete(null)
     }
   }
 
@@ -194,9 +136,9 @@ export function AppSidebar() {
       <Sidebar className="border-r">
         <SidebarHeader className="flex flex-col gap-2 px-3 py-2">
           <div className="flex items-center justify-between">
-            <div className="flex items-center px-2 py-1">{mounted && <ThemeAwareLogo className="h-6 w-auto" />}</div>
-            <Button variant="ghost" size="icon" onClick={handleNewSession}>
-              <Plus className="h-5 w-5" />
+            <div className="flex items-center px-2 py-1"><ThemeAwareLogo className="h-6 w-auto"/></div>
+            <Button variant="ghost" size="icon" onClick={handleNewSession} disabled={isLoading} title="New chat">
+              <Plus className="h-5 w-5"/>
             </Button>
           </div>
         </SidebarHeader>
@@ -210,7 +152,7 @@ export function AppSidebar() {
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton asChild>
                       <a href={item.url}>
-                        <item.icon className="h-4 w-4" />
+                        <item.icon className="h-4 w-4"/>
                         <span>{item.title}</span>
                       </a>
                     </SidebarMenuButton>
@@ -246,21 +188,39 @@ export function AppSidebar() {
                       {dateSessions.map((session) => (
                         <SidebarMenuItem key={session.id}>
                           <SidebarMenuButton
-                            isActive={session.id === activeChat}
+                            isActive={session.id === activeSession}
                             onClick={() => handleSessionSelect(session.id)}
-                            className="group relative justify-between py-3 px-3"
+                            className="group relative justify-between py-3 px-3 align-middle"
                           >
                             <div className="flex items-center">
                               <MessageSquare className="mr-3 h-4 w-4" />
-                              <span className="truncate">{session.lastMessage}</span>
+                              <span className="truncate">{session.name || defaultConversationName}</span>
                             </div>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 data-[active=true]:opacity-100"
-                            >
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <div
+                                  className="flex items-center h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 data-[active=true]:opacity-100"
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                  }}
+                                >
+                                  <MoreVertical className="h-4 w-4" />
+                                </div>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  className="text-destructive cursor-pointer focus:text-destructive"
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    setSessionToDelete(session.id)
+                                    setDeleteDialogOpen(true)
+                                  }}
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </SidebarMenuButton>
                         </SidebarMenuItem>
                       ))}
@@ -306,6 +266,35 @@ export function AppSidebar() {
       </Sidebar>
 
       <SettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} />
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the chat session
+              and all its messages.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteSession}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? (
+                <>
+                  <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  Deleting...
+                </>
+              ) : (
+                'Delete'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }

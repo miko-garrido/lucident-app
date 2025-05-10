@@ -21,14 +21,34 @@ export interface Session {
 }
 
 export interface Event {
-  content?: {
-    parts?: {
-      text?: string
-    }[]
-  }
-  id: string
-  author: string
-  timestamp: number
+  content: {
+    parts: Array<{
+      text?: string;
+      functionCall?: {
+        id: string;
+        args: Record<string, any>;
+        name: string;
+      };
+      functionResponse?: {
+        id: string;
+        name: string;
+        response: Record<string, any>;
+      };
+    }>;
+    role: "user" | "model" | "clickup_agent" | "lucident_agent";
+  };
+  invocation_id: string;
+  author: string;
+  actions: {
+    state_delta: Record<string, any>;
+    artifact_delta: Record<string, any>;
+    requested_auth_configs?: Record<string, any>;
+    transfer_to_agent?: string;
+  };
+  id: string;
+  timestamp: number;
+  partial?: boolean;
+  long_running_tool_ids?: string[];
 }
 
 export interface AgentRunRequest {
@@ -87,6 +107,21 @@ class ApiClient {
 
     // If not JSON, return the response itself
     return response as unknown as T
+  }
+
+  async debugTrace(traceId: string): Promise<any> {
+    try {
+      const response = await fetch(`${this.baseUrl}/debug/trace/${traceId}`, {
+        headers: {
+          Accept: "application/json",
+        },
+      })
+
+      return this.handleResponse<any>(response, "Failed to fetch debug trace")
+    } catch (error) {
+      console.error("Error fetching debug trace:", error)
+      return null
+    }
   }
 
   // Session management
@@ -181,21 +216,19 @@ class ApiClient {
       this.sessionId = session.id
     }
 
-    const payload: AgentRunRequest = {
+    const payload = {
       app_name: APP_NAME,
       user_id: USER_ID,
       session_id: this.sessionId!,
       new_message: {
         role: "user",
-        content: {
-          parts: [
-            {
-              text: message,
-            },
-          ],
-        },
+        parts: [
+          {
+            text: message
+          }
+        ]
       },
-      streaming: true,
+      streaming: false,
     }
 
     try {
@@ -212,7 +245,30 @@ class ApiClient {
         throw new Error(`Failed to send message: ${response.status}. Details: ${errorText}`)
       }
 
-      return response.body!
+      const textDecoder = new TextDecoder()
+      const textEncoder = new TextEncoder()
+      const reader = response.body!.getReader()
+      const sseStream = new ReadableStream({
+        async start(controller) {
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+
+            try {
+              const chunk = textDecoder.decode(value, { stream: true })
+              const parsed = JSON.parse(chunk?.split('data: ')?.[1] || '{}')
+              if (parsed.content?.parts?.[0]?.text) {
+                controller.enqueue(textEncoder.encode(`${parsed.content?.parts?.[0]?.text}`))
+              }
+            } catch (err) {
+
+            }
+          }
+          controller.close()
+        },
+      })
+
+      return sseStream
     } catch (error) {
       console.error("Error sending message:", error)
 
@@ -221,9 +277,7 @@ class ApiClient {
       return new ReadableStream({
         start(controller) {
           controller.enqueue(
-            encoder.encode(
-              `data: ${JSON.stringify({ text: "Sorry, I couldn't connect to the server. Please try again later." })}\n\n`,
-            ),
+            encoder.encode("Sorry, I couldn't connect to the server. Please try again later."),
           )
           controller.enqueue(encoder.encode("data: [DONE]\n\n"))
           controller.close()

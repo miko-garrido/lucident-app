@@ -1,10 +1,12 @@
 import { apiClient } from "@/lib/api-client"
-
+import { NextResponse } from 'next/server';
 export const runtime = "nodejs"
 
 export async function POST(req: Request) {
   try {
     const { messages } = await req.json()
+    const { searchParams } = new URL(req.url);
+    const sessionId = searchParams.get("sessionId") || '';
 
     // Check if we have messages to process
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
@@ -14,49 +16,9 @@ export async function POST(req: Request) {
     // Get the last message from the user
     const lastMessage = messages[messages.length - 1]
 
-    if (lastMessage.role !== "user") {
-      return new Response("Last message must be from user", { status: 400 })
-    }
-
-    // Create a session if one doesn't exist
-    let sessionId = apiClient.getSessionId()
-
-    if (!sessionId) {
-      try {
-        const session = await apiClient.createSession()
-        sessionId = session.id
-        apiClient.setSessionId(sessionId)
-      } catch (error) {
-        console.error("Failed to create session:", error)
-        // Return a mock response if we can't create a session
-        return new Response(
-          new ReadableStream({
-            start(controller) {
-              controller.enqueue(
-                new TextEncoder().encode(
-                  `data: ${JSON.stringify({
-                    text: "I'm having trouble connecting to the server. Please try again later.",
-                  })}\n\n`,
-                ),
-              )
-              controller.enqueue(new TextEncoder().encode("data: [DONE]\n\n"))
-              controller.close()
-            },
-          }),
-          {
-            headers: {
-              "Content-Type": "text/event-stream",
-              "Cache-Control": "no-cache",
-              Connection: "keep-alive",
-            },
-          },
-        )
-      }
-    }
 
     // Send the message to the API and stream the response
     const stream = await apiClient.sendMessage(lastMessage.content, sessionId)
-
     // Return the stream as a response
     return new Response(stream, {
       headers: {

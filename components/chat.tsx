@@ -1,33 +1,49 @@
 "use client"
 
-import { useChat } from "ai/react"
-import { useState, useRef, useEffect } from "react"
+import { useSession } from '@/lib/session-context';
+import { useChat, Message } from "@ai-sdk/react"
+
+import {useRef, useEffect, useState, FormEvent, ChangeEvent} from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { ChatMessage } from "@/components/chat-message"
 import { ArrowUp, Paperclip, Plus } from "lucide-react"
 import { apiClient } from "@/lib/api-client"
+import { Session } from "@/lib/api-client"
+import {redirect, useRouter} from "next/navigation"
 
-export function Chat() {
-  const { messages, input, handleInputChange, handleSubmit, isLoading, error, setMessages } = useChat({
-    api: "/api/chat",
-    body: {
-      // Remove any OpenAI-specific options like temperature, max_tokens, etc.
-    },
-    onResponse: (response) => {
-      // You can handle the response here if needed
-      console.log("Chat response received")
+
+interface ChatProps {
+  sessionId: string
+}
+
+type ChatMessageType = {
+  id: string
+  role: "user" | "assistant" | "system"
+  content: string
+}
+
+export function Chat({ sessionId }: ChatProps) {
+  const { messages, input, setInput, handleSubmit, isLoading, handleInputChange, error, setMessages } = useChat({
+    api: `/api/chat?sessionId=${sessionId}`,
+    streamProtocol: 'text',
+    onResponse: async (response) => {
+
     },
     onError: (error) => {
       console.error("Chat error:", error)
     },
   })
+  const formRef = useRef<HTMLFormElement>(null);
+
+  const [storedSession, setStoredSession] = useState<Session | null>(null);
+  const [loadingSessionDetails, setLoadingSessionDetails] = useState(false);
+  const { refreshSessions } = useSession();
+  const router = useRouter()
 
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-  const [isMounted, setIsMounted] = useState(false)
-  const [sessions, setSessions] = useState<Array<{ id: string; lastMessage: string }>>([])
 
   // Example suggested prompts
   const suggestedPrompts = [
@@ -49,135 +65,111 @@ export function Chat() {
     },
   ]
 
+  const fetchSession = async () => {
+    setLoadingSessionDetails(true);
+    try {
+      const session = await apiClient.getSession(sessionId);
+      setStoredSession(session);
+    }catch (err) {
+      console.error("Error fetching session:", err)
+    } finally {
+      setLoadingSessionDetails(false);
+    }
+  };
+
   // Initialize session on mount
   useEffect(() => {
-    if (!isMounted) {
-      setIsMounted(true)
+    // Focus on the input field
+    setTimeout(() => {
       inputRef.current?.focus()
+    }, 100)
+    fetchSession()
 
-      // Initialize a session or load existing sessions
-      const initializeSession = async () => {
-        try {
-          const sessionList = await apiClient.listSessions()
-          if (sessionList.length > 0) {
-            // Use the most recent session
-            const latestSession = sessionList[0]
-            apiClient.setSessionId(latestSession.id)
-            setSessions(
-              sessionList.map((session) => ({
-                id: session.id,
-                lastMessage: getLastMessageFromSession(session),
-              })),
-            )
-          } else {
-            // Create a new session
-            const newSession = await apiClient.createSession()
-            apiClient.setSessionId(newSession.id)
-          }
-        } catch (error) {
-          console.error("Failed to initialize session:", error)
-        }
-      }
+    // Set the session ID
+    apiClient.setSessionId(sessionId)
+  }, [sessionId, setMessages])
 
-      initializeSession()
-    }
-  }, [isMounted])
-
-  // Helper function to extract the last message from a session
-  const getLastMessageFromSession = (session: any) => {
-    if (session.events && session.events.length > 0) {
-      const lastEvent = session.events[session.events.length - 1]
-      if (lastEvent.content?.parts?.[0]?.text) {
-        return lastEvent.content.parts[0].text
-      }
-    }
-    return "New conversation"
-  }
-
-  // Scroll to bottom when messages change
   useEffect(() => {
-    if (scrollAreaRef.current) {
-      scrollAreaRef.current.scrollTo({
-        top: scrollAreaRef.current.scrollHeight,
-        behavior: "smooth",
+    // Convert session events to messages if they exist
+    if (storedSession?.events && storedSession.events.length > 0) {
+      const initialMessages: Message[] = storedSession.events.map(event => ({
+        id: event.id,
+        role: (event.author === "user" ? "user" : "assistant") as 'system' | 'user' | 'assistant' | 'data',
+        content: event.content?.parts?.[0].text || '',
+      })).filter(message => message.content.trim() !== '');
+      setMessages(initialMessages)
+    } else {
+      setMessages([])
+    }
+  }, [storedSession]);
+
+  // Scroll to bottom when messages change or content updates
+  useEffect(() => {
+    const element = document.getElementById('main-content');
+    const scrollToBottom = () => {
+      if (element) {
+        element.scrollTo({
+          top: element.scrollHeight,
+          behavior: "smooth",
+        })
+      }
+    }
+
+    // Create a MutationObserver to watch for content changes
+    const observer = new MutationObserver(scrollToBottom)
+
+    if (element) {
+      observer.observe(element, {
+        childList: true,
+        subtree: true,
+        characterData: true,
       })
     }
+
+    // Initial scroll
+    scrollToBottom()
+
+    return () => observer.disconnect()
   }, [messages])
 
-  // Set up dummy conversation data
-  useEffect(() => {
-    if (!isMounted) return
-
-    // Override the messages with dummy data
-    const dummyMessages = [
-      {
-        id: "user-1",
-        role: "user",
-        content: "Which projects managed by Kai have overdue tasks?",
-      },
-      {
-        id: "assistant-1",
-        role: "assistant",
-        content:
-          "3 projects managed by Kai have overdue tasks:\n- Orbit redesign (2 tasks overdue)\n- Zenith form migration (1 task overdue)\n- GoodPeople A/B testing (5 tasks overdue, 2 blocked by review)",
-      },
-      {
-        id: "user-2",
-        role: "user",
-        content: "What was Kelly's latest feedback in Slack for the Orbit redesign?",
-      },
-      {
-        id: "assistant-2",
-        role: "assistant",
-        content:
-          'Kelly yesterday at 2:43 PM: "Feels closer to our brand. That said, content will likely be longer — let\'s explore more layout options?"',
-      },
-      {
-        id: "user-3",
-        role: "user",
-        content: "Thanks - set a 15-min invite today that works for me, Kai, and the assigned designer.",
-      },
-      {
-        id: "assistant-3",
-        role: "assistant",
-        content: "Scheduled for today at 4:30 PM. Invite sent to you, Kai, and Ana (designer).",
-      },
-    ]
-
-    // Use a custom method to override the messages
-    // This is a workaround since useChat doesn't provide a direct way to set initial messages
-    const chatContainer = document.querySelector("[data-chat-messages]")
-    if (chatContainer && messages.length === 0) {
-      // Only inject if there are no messages yet
-      setTimeout(() => {
-        if (setMessages) {
-          setMessages(dummyMessages)
-        }
-      }, 100)
-    }
-  }, [isMounted, messages.length, setMessages])
-
-  const handlePromptClick = (prompt: string) => {
-    const fullPrompt = prompt.replace("\n", " ")
-    handleSubmit(new Event("submit") as any, { prompt: fullPrompt })
+  const handlePromptClick = async (prompt: string) => {
+    // setInput(prompt.replace("\n", " "))
+    handleInputChange({ target: { value: prompt.replace("\n", " ") } } as ChangeEvent<HTMLInputElement> | ChangeEvent<HTMLTextAreaElement>)
+    setTimeout(() => {
+      formRef.current?.requestSubmit();
+    }, 2000)
   }
 
   // Create a new chat session
   const handleNewChat = async () => {
     try {
       const newSession = await apiClient.createSession()
-      apiClient.setSessionId(newSession.id)
-      // Reset the chat UI
-      window.location.reload()
+      refreshSessions()
+      router.push(`/?session=${newSession.id}`)
     } catch (error) {
       console.error("Failed to create new session:", error)
     }
   }
 
+  // Convert AI messages to ChatMessageType
+  const convertMessage = (message: Message): ChatMessageType => ({
+    id: message.id,
+    role: message.role === "data" ? "assistant" : message.role,
+    content: message.content
+  })
+
+  if (loadingSessionDetails) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <p className="text-muted-foreground">Loading session details...</p>
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-full flex-col items-center">
       <div className="flex w-full max-w-3xl flex-1 flex-col px-4">
-        <ScrollArea ref={scrollAreaRef} className="flex-1 py-6" viewportClassName="h-full">
+        <ScrollArea ref={scrollAreaRef} className="flex-1 py-6">
           <div className="space-y-6 pb-20" data-chat-messages>
             {messages.length === 0 ? (
               <div className="flex min-h-[30vh] flex-col items-start justify-center space-y-2">
@@ -185,14 +177,14 @@ export function Chat() {
                 <p className="text-2xl text-muted-foreground">How can I help you today?</p>
               </div>
             ) : (
-              messages.map((message) => <ChatMessage key={message.id} message={message} />)
+              messages.map((message) => <ChatMessage key={message.id} message={convertMessage(message)} />)
             )}
             {isLoading && messages.length > 0 && (
               <ChatMessage
                 message={{
                   id: "loading",
                   role: "assistant",
-                  content: "Thinking...",
+                  content: "Thinking..."
                 }}
                 isLoading
               />
@@ -224,7 +216,7 @@ export function Chat() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="flex items-center gap-2 rounded-full bg-muted p-2 pl-4">
+          <form onSubmit={handleSubmit} ref={formRef} className="flex items-center gap-2 rounded-full bg-muted p-2 pl-4">
             <Button
               type="button"
               variant="ghost"
