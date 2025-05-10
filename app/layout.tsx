@@ -6,6 +6,7 @@ import { SidebarProvider } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/sidebar"
 import { ThemeProvider } from "@/components/theme-provider"
 import { UserProvider } from "@/contexts/user-context"
+import { SessionProvider } from "@/lib/session-context"
 
 // Load DM Sans font with all weights
 const dmSans = DM_Sans({
@@ -35,14 +36,16 @@ export default function RootLayout({
           disableTransitionOnChange
           storageKey="ai-chat-theme"
         >
-          <UserProvider>
-            <SidebarProvider>
-              <div className="flex h-screen w-full overflow-hidden">
-                <AppSidebar />
-                <div className="flex flex-1 flex-col overflow-hidden">{children}</div>
-              </div>
-            </SidebarProvider>
-          </UserProvider>
+          <SessionProvider>
+            <UserProvider>
+              <SidebarProvider>
+                <div className="flex h-screen w-full overflow-hidden">
+                  <AppSidebar />
+                  <div className="flex flex-1 flex-col overflow-hidden">{children}</div>
+                </div>
+              </SidebarProvider>
+            </UserProvider>
+          </SessionProvider>
         </ThemeProvider>
       </body>
     </html>

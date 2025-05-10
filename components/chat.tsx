@@ -1,5 +1,6 @@
 "use client"
 
+import {useSession} from '@/lib/session-context';
 import { useChat, Message } from "ai/react"
 import {RedirectType} from 'next/dist/client/components/redirect-error';
 import { useRef, useEffect } from "react"
@@ -10,7 +11,7 @@ import { ChatMessage } from "@/components/chat-message"
 import { ArrowUp, Paperclip, Plus } from "lucide-react"
 import { apiClient } from "@/lib/api-client"
 import { Session } from "@/lib/api-client"
-import { redirect } from "next/navigation"
+import {redirect, useRouter} from "next/navigation"
 
 
 interface ChatProps {
@@ -34,6 +35,8 @@ export function Chat({ session }: ChatProps) {
       console.error("Chat error:", error)
     },
   })
+  const { refreshSessions } = useSession();
+  const router = useRouter()
 
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -58,7 +61,6 @@ export function Chat({ session }: ChatProps) {
     },
   ]
 
-  console.log('session', session)
   // Initialize session on mount
   useEffect(() => {
 
@@ -102,7 +104,8 @@ export function Chat({ session }: ChatProps) {
   const handleNewChat = async () => {
     try {
       const newSession = await apiClient.createSession()
-      redirect(`/?session=${newSession.id}`,RedirectType.replace)
+      refreshSessions()
+      router.push(`/?session=${newSession.id}`)
     } catch (error) {
       console.error("Failed to create new session:", error)
     }

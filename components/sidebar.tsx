@@ -1,9 +1,8 @@
 "use client"
 
-import {RedirectType} from 'next/dist/client/components/redirect-error';
-import { useState, useEffect } from "react"
+import {useEffect, useState} from "react"
 import { MessageSquare, Plus, MoreVertical, Home, Settings, Search, Trash2 } from "lucide-react"
-import { useSearchParams } from "next/navigation"
+import { useSearchParams, useRouter } from "next/navigation"
 import {
   Sidebar,
   SidebarContent,
@@ -22,8 +21,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { SettingsModal } from "@/components/settings-modal"
-import { apiClient } from "@/lib/api-client"
-import { redirect } from "next/navigation"
+import { useSession } from "@/lib/session-context"
 
 // Sample menu items
 const menuItems = [
@@ -44,74 +42,26 @@ const menuItems = [
   },
 ]
 
-const defaultConversationName = "New conversation";
+const defaultConversationName = "New conversation"
+
 export function AppSidebar() {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const currentSessionId = searchParams.get('session') as string | undefined
-  const [activeChat, setActiveChat] = useState<string | null>(currentSessionId || null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [sessionToDelete, setSessionToDelete] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
-  // Update the sessions state to include session name
-  const [sessions, setSessions] = useState<Array<{ id: string; name: string; lastMessage: string; timestamp: number }>>(
-    [],
-  )
 
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [isNewSessionCreating, setIsNewSessionCreating] = useState(false)
-
-
-  // Load sessions on mount
-  useEffect(() => {
-
-    setIsLoading(true)
-    setError(null)
-
-    // Update the loadSessions function in the useEffect
-    const loadSessions = async () => {
-      try {
-
-        // List available sessions
-        const sessionList = await apiClient.listSessions()
-
-        if (sessionList && sessionList.length > 0) {
-          // Transform the sessions into the format we need
-          const formattedSessions = sessionList
-            .map((session) => ({
-              id: session.id,
-              name: session.state?.session_name || defaultConversationName,
-              lastMessage: getLastMessageFromSession(session) || defaultConversationName,
-              timestamp: session.last_update_time || Date.now(),
-            }))
-            .sort((a, b) => b.timestamp - a.timestamp);
-          setSessions(formattedSessions)
-        }
-        setIsLoading(false)
-      } catch (error) {
-        console.error("Error loading sessions:", error)
-        setError("Failed to load sessions")
-        setIsLoading(false)
-      }
-    }
-
-    loadSessions()
-  }, [])
-
-  // Helper function to extract the last message from a session
-  const getLastMessageFromSession = (session: any) => {
-    if (session?.events && Array.isArray(session.events) && session.events.length > 0) {
-      const userEvents = session.events.filter((event: any) => event.author === "user")
-      if (userEvents.length > 0) {
-        const lastUserEvent = userEvents[userEvents.length - 1]
-        if (lastUserEvent?.content?.parts?.[0]?.text) {
-          return lastUserEvent.content.parts[0].text
-        }
-      }
-    }
-    return defaultConversationName
-  }
+  const {
+    sessions,
+    isLoading,
+    error,
+    activeSession,
+    setActiveSession,
+    createSession,
+    deleteSession,
+  } = useSession()
 
   // Group sessions by date
   const groupedSessions = sessions.reduce(
@@ -145,43 +95,22 @@ export function AppSidebar() {
     {} as Record<string, typeof sessions>,
   )
 
+  useEffect(()=> {
+    setActiveSession(currentSessionId || sessions[0]?.id || "")
+  }, [currentSessionId])
   // Handle session selection
   const handleSessionSelect = (sessionId: string) => {
-    apiClient.setSessionId(sessionId)
-    setActiveChat(sessionId)
-    redirect(`/?session=${sessionId}`,RedirectType.replace)
+    setActiveSession(sessionId)
+    router.push(`/?session=${sessionId}`)
   }
 
-  // Update the handleNewSession function
+  // Handle new session creation
   const handleNewSession = async () => {
     try {
-      setIsNewSessionCreating(true)
-      const newSession = await apiClient.createSession(defaultConversationName)
-
-      if (!newSession || !newSession.id) {
-        throw new Error("Failed to create session: Invalid response")
-      }
-      // Add the new session to the list
-      setSessions((prev) => [
-        {
-          id: newSession.id,
-          name: newSession.state?.session_name || defaultConversationName,
-          lastMessage: defaultConversationName,
-          timestamp: Date.now() / 1000,
-        },
-        ...prev,
-      ])
-      apiClient.setSessionId(newSession.id)
-      setActiveChat(newSession.id)
-      redirect(`/?session=${newSession.id}`, RedirectType.replace)
+      const newSession = await createSession()
+      router.push(`/?session=${newSession.id}`)
     } catch (error) {
       console.error("Failed to create new session:", error)
-
-      // Create a mock session ID as fallback
-      const mockSessionId = `mock-${Date.now()}`
-      apiClient.setSessionId(mockSessionId)
-    } finally {
-      setIsNewSessionCreating(false)
     }
   }
 
@@ -191,16 +120,7 @@ export function AppSidebar() {
 
     try {
       setIsDeleting(true)
-      await apiClient.deleteSession(sessionToDelete)
-
-      // Remove the session from the list
-      setSessions(prev => prev.filter(session => session.id !== sessionToDelete))
-
-      // // If the deleted session was active, redirect to a new session
-      // if (sessionToDelete === activeChat) {
-      //   const newSession = await apiClient.createSession()
-      //   redirect(`/?session=${newSession.id}`, RedirectType.replace)
-      // }
+      await deleteSession(sessionToDelete)
     } catch (error) {
       console.error("Failed to delete session:", error)
     } finally {
@@ -215,7 +135,6 @@ export function AppSidebar() {
       <Sidebar className="border-r">
         <SidebarHeader className="flex flex-col gap-2 px-3 py-2">
           <div className="flex items-center justify-between">
-            {/*<div className="flex items-center px-2 py-1">{mounted && <ThemeAwareLogo className="h-6 w-auto" />}</div>*/}
             <Button variant="ghost" size="icon" onClick={handleNewSession} disabled={isLoading} title="New chat">
               <Plus className="h-5 w-5" />
               <span className="sr-only">New chat</span>
@@ -265,17 +184,10 @@ export function AppSidebar() {
                   <div key={date} className="mb-4">
                     <h2 className="mb-2 px-3 pt-2 text-xs text-muted-foreground">{date}</h2>
                     <SidebarMenu className="space-y-1.5">
-                      {isNewSessionCreating &&
-                        <SidebarMenuItem>
-                          <div className="flex items-center justify-center p-4">
-                            <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-primary"></div>
-                            <span className="ml-2 text-sm text-muted-foreground">Creating new session...</span>
-                          </div>
-                        </SidebarMenuItem>}
                       {dateSessions.map((session) => (
                         <SidebarMenuItem key={session.id}>
                           <SidebarMenuButton
-                            isActive={session.id === activeChat}
+                            isActive={session.id === activeSession}
                             onClick={() => handleSessionSelect(session.id)}
                             className="group relative justify-between py-3 px-3"
                           >
