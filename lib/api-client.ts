@@ -272,19 +272,17 @@ class ApiClient {
       this.sessionId = session.id
     }
 
-    const payload: AgentRunRequest = {
+    const payload = {
       app_name: APP_NAME,
       user_id: USER_ID,
       session_id: this.sessionId!,
       new_message: {
         role: "user",
-        content: {
-          parts: [
-            {
-              text: message,
-            },
-          ],
-        },
+        parts: [
+          {
+            text: message
+          }
+        ]
       },
       streaming: true,
     }
@@ -303,6 +301,9 @@ class ApiClient {
         const errorText = await response.text()
         throw new Error(`Failed to send message: ${response.status}. Details: ${errorText}`)
       }
+
+      // After successful message send, refresh the session
+      await this.getSession(this.sessionId!)
 
       return response.body!
     } catch (error) {

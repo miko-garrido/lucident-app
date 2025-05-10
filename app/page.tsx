@@ -7,11 +7,13 @@ import { apiClient } from "@/lib/api-client"
 import { redirect } from "next/navigation"
 
 interface HomePageProps {
-  searchParams: { [key: string]: string | string[] | undefined }
+  searchParams: { [key: string]: string | string[] | undefined };
 }
 
 export default async function HomePage({ searchParams }: HomePageProps) {
-  const sessionId = searchParams.session as string | undefined
+  const sessionId = Array.isArray(searchParams.session)
+    ? searchParams.session[0]
+    : searchParams.session;
 
   // If no session ID is provided, create a new session and redirect
   if (!sessionId) {
@@ -25,8 +27,11 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   // If session not found, create a new one and redirect
   if (!session) {
     const newSession = await apiClient.createSession()
+    apiClient.setSessionId(newSession.id);
     redirect(`/?session=${newSession.id}`)
   }
+
+  apiClient.setSessionId(sessionId);
 
   return (
     <div className="flex h-full flex-col">
@@ -42,7 +47,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         <ThemeToggle />
       </header>
       <main className="flex flex-1 flex-col overflow-auto">
-        <Chat session={session} />
+        <Chat sessionId={sessionId} />
       </main>
     </div>
   )

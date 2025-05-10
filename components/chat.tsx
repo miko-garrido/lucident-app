@@ -2,8 +2,8 @@
 
 import {useSession} from '@/lib/session-context';
 import { useChat, Message } from "ai/react"
-import {RedirectType} from 'next/dist/client/components/redirect-error';
-import { useRef, useEffect } from "react"
+
+import {useRef, useEffect, useState, FormEvent} from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -15,7 +15,7 @@ import {redirect, useRouter} from "next/navigation"
 
 
 interface ChatProps {
-  session: Session
+  sessionId: string
 }
 
 type ChatMessageType = {
@@ -24,17 +24,18 @@ type ChatMessageType = {
   content: string
 }
 
-export function Chat({ session }: ChatProps) {
-  const { messages, input, handleInputChange, handleSubmit, isLoading, error, setMessages } = useChat({
-    api: "/api/chat",
-    onResponse: (response) => {
-      // You can handle the response here if needed
-      console.log("Chat response received")
+export function Chat({ sessionId }: ChatProps) {
+  const { messages, input, setInput, handleInputChange, isLoading, error, setMessages } = useChat({
+    api: `/api/chat?sessionId=${sessionId}`,
+    onResponse: async (response) => {
+      // Refresh the session after each message
+      // await refreshSessions()
     },
     onError: (error) => {
       console.error("Chat error:", error)
     },
   })
+  const [storedSession, setStoredSession] = useState<Session | null>(null);
   const { refreshSessions } = useSession();
   const router = useRouter()
 
@@ -61,20 +62,43 @@ export function Chat({ session }: ChatProps) {
     },
   ]
 
+  const fetchSession = async () => {
+    try {
+      const session = await apiClient.getSession(sessionId);
+      setStoredSession(session);
+    }catch (err) {
+      console.error("Error fetching session:", err)
+    }
+  };
+
   // Initialize session on mount
   useEffect(() => {
-
     // Focus on the input field
     setTimeout(() => {
       inputRef.current?.focus()
     }, 100)
+    fetchSession()
 
     // Set the session ID
-    apiClient.setSessionId(session.id)
+    apiClient.setSessionId(sessionId)
+  }, [sessionId, setMessages])
 
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setMessages([...messages, { id: Date.now().toString(), role: "user", content: JSON.stringify([{ text: input }]) }])
+    setInput('');
+    try {
+      await apiClient.sendMessage(input, storedSession?.id);
+      fetchSession();
+    } catch (err) {
+      console.error("Error sending message:", err)
+    }
+  }
+
+  useEffect(() => {
     // Convert session events to messages if they exist
-    if (session.events && session.events.length > 0) {
-      const initialMessages: Message[] = session.events.map(event => ({
+    if (storedSession?.events && storedSession.events.length > 0) {
+      const initialMessages: Message[] = storedSession.events.map(event => ({
         id: event.id,
         role: event.author === "user" ? "user" : "assistant",
         content: JSON.stringify(event.content?.parts ?? []),
@@ -83,7 +107,7 @@ export function Chat({ session }: ChatProps) {
     } else {
       setMessages([])
     }
-  }, [session, setMessages])
+  }, [storedSession]);
 
   // Scroll to bottom when messages change
   useEffect(() => {

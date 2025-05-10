@@ -189,24 +189,22 @@ export function AppSidebar() {
                           <SidebarMenuButton
                             isActive={session.id === activeSession}
                             onClick={() => handleSessionSelect(session.id)}
-                            className="group relative justify-between py-3 px-3"
+                            className="group relative justify-between py-3 px-3 align-middle"
                           >
-                            <div className="flex items-center">
+                            <div className="flex">
                               <MessageSquare className="mr-3 h-4 w-4" />
                               <span className="truncate">{session.name || defaultConversationName}</span>
                             </div>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 data-[active=true]:opacity-100"
+                                <div
+                                  className="flex items-center h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 data-[active=true]:opacity-100"
                                   onClick={(event) => {
                                     event.stopPropagation()
                                   }}
                                 >
                                   <MoreVertical className="h-4 w-4" />
-                                </Button>
+                                </div>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
                                 <DropdownMenuItem

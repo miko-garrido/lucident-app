@@ -142,6 +142,11 @@ export function ChatMessage({message, isLoading = false}: ChatMessageProps) {
   }
 
   if (isFunctionResponse) {
+
+    if (Object.keys(parsedMessage?.[0]?.functionResponse?.response ?? {}).length) {
+      return <></>;
+    }
+
     return (
       <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
         <Button
