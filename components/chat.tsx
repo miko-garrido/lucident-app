@@ -77,7 +77,7 @@ export function Chat({ session }: ChatProps) {
       const initialMessages: Message[] = session.events.map(event => ({
         id: event.id,
         role: event.author === "user" ? "user" : "assistant",
-        content: event.content?.parts?.[0]?.text || ""
+        content: JSON.stringify(event.content?.parts ?? []),
       }))
       setMessages(initialMessages)
     } else {

@@ -24,14 +24,34 @@ export interface Session {
 }
 
 export interface Event {
-  content?: {
-    parts?: {
-      text?: string
-    }[]
-  }
-  id: string
-  author: string
-  timestamp: number
+  content: {
+    parts: Array<{
+      text?: string;
+      functionCall?: {
+        id: string;
+        args: Record<string, any>;
+        name: string;
+      };
+      functionResponse?: {
+        id: string;
+        name: string;
+        response: Record<string, any>;
+      };
+    }>;
+    role: "user" | "model" | "clickup_agent" | "lucident_agent";
+  };
+  invocation_id: string;
+  author: string;
+  actions: {
+    state_delta: Record<string, any>;
+    artifact_delta: Record<string, any>;
+    requested_auth_configs?: Record<string, any>;
+    transfer_to_agent?: string;
+  };
+  id: string;
+  timestamp: number;
+  partial?: boolean;
+  long_running_tool_ids?: string[];
 }
 
 export interface AgentRunRequest {
@@ -91,6 +111,21 @@ class ApiClient {
     // If not JSON, return a default object for the expected type
     console.warn("Response is not JSON. Content-Type:", contentType)
     return {} as T
+  }
+
+  async debugTrace(traceId: string): Promise<any> {
+    try {
+      const response = await fetch(`${this.baseUrl}/debug/trace/${traceId}`, {
+        headers: {
+          Accept: "application/json",
+        },
+      })
+
+      return this.handleResponse<any>(response, "Failed to fetch debug trace")
+    } catch (error) {
+      console.error("Error fetching debug trace:", error)
+      return null
+    }
   }
 
   // Session management
