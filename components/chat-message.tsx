@@ -112,7 +112,57 @@ const components: Components = {
 
 export function ChatMessage({message, isLoading = false}: ChatMessageProps) {
   const isUser = message.role === "user"
+  const parsedMessage = JSON.parse(message.content);
+  const isText = parsedMessage?.[0]?.text !== undefined;
+  const isFunctionCall = parsedMessage?.[0]?.functionCall !== undefined;
+  const isFunctionResponse = parsedMessage?.[0]?.functionResponse !== undefined;
+  const textMessage = isText ? parsedMessage[0].text : "";
 
+  const handleFunctionCall = async () => {
+    try {
+      await apiClient.debugTrace(message.id);
+    } catch (error) {
+      console.error("Error loading sessions:", error)
+    }
+  }
+
+  // ToDo: remove this once we have UX ready for this
+  if (isFunctionCall || isFunctionResponse) return <></>;
+
+  if (isFunctionCall) {
+    return (
+      <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
+        <Button
+          variant="outline"
+          className="h-auto justify-start p-4 text-left"
+          onClick={() => handleFunctionCall()}
+        >
+          <Zap className="h-5 w-5" />
+          <div className="font-medium">{parsedMessage[0].functionCall.name}</div>
+        </Button>
+      </div>
+    )
+  }
+
+  if (isFunctionResponse) {
+
+    if (Object.keys(parsedMessage?.[0]?.functionResponse?.response ?? {}).length) {
+      return <></>;
+    }
+
+    return (
+      <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
+        <Button
+          variant="outline"
+          className="h-auto justify-start p-4 text-left"
+          onClick={() => handleFunctionCall()}
+        >
+          <Check className="h-5 w-5" />
+          <div className="font-medium">{parsedMessage[0].functionResponse.name}</div>
+        </Button>
+      </div>
+    )
+  }
 
   return (
     <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
@@ -129,7 +179,7 @@ export function ChatMessage({message, isLoading = false}: ChatMessageProps) {
             remarkPlugins={[remarkGfm, remarkBreaks]}
             components={components}
           >
-            {message.content}
+            {textMessage}
           </ReactMarkdown>
         </div>
       </div>
