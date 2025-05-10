@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react"
 import { apiClient } from "@/lib/api-client"
+import { useRouter } from "next/navigation"
 
 interface Session {
   id: string
@@ -26,6 +27,7 @@ const SessionContext = createContext<SessionContextType | undefined>(undefined)
 const defaultConversationName = "New conversation"
 
 export function SessionProvider({ children }: { children: ReactNode }) {
+  const router = useRouter()
   const [sessions, setSessions] = useState<Session[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -88,6 +90,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setSessions((prev) => [session, ...prev])
       setActiveSession(newSession.id)
       apiClient.setSessionId(newSession.id)
+      router.push(`/?session=${newSession.id}`)
 
       return session
     } catch (error) {
@@ -99,11 +102,23 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const deleteSession = async (sessionId: string) => {
     try {
       await apiClient.deleteSession(sessionId)
-      setSessions((prev) => prev.filter((session) => session.id !== sessionId))
+      
+      // Remove the deleted session from the list
+      const updatedSessions = sessions.filter((session) => session.id !== sessionId)
+      setSessions(updatedSessions)
 
+      // If the deleted session was active, handle navigation
       if (sessionId === activeSession) {
-        const newSession = await createSession()
-        setActiveSession(newSession.id)
+        if (updatedSessions.length > 0) {
+          // If there are other sessions, navigate to the first one
+          const firstSession = updatedSessions[0]
+          setActiveSession(firstSession.id)
+          apiClient.setSessionId(firstSession.id)
+          router.push(`/?session=${firstSession.id}`)
+        } else {
+          // If no sessions remain, create a new one
+          await createSession()
+        }
       }
     } catch (error) {
       console.error("Failed to delete session:", error)
