@@ -15,10 +15,7 @@ export interface Session {
   id: string
   app_name: string
   user_id: string
-  state: {
-    session_name?: string
-    [key: string]: any
-  }
+  state: Record<string, any>
   events: Event[]
   last_update_time: number
 }
@@ -74,7 +71,7 @@ class ApiClient {
   private baseUrl: string
   private sessionId: string | null = null
 
-  constructor(baseUrl = "https://api.lucident.ai/") {
+  constructor(baseUrl = "/api") {
     this.baseUrl = baseUrl
   }
 
@@ -108,9 +105,8 @@ class ApiClient {
       return (await response.json()) as T
     }
 
-    // If not JSON, return a default object for the expected type
-    console.warn("Response is not JSON. Content-Type:", contentType)
-    return {} as T
+    // If not JSON, return the response itself
+    return response as unknown as T
   }
 
   async debugTrace(traceId: string): Promise<any> {
@@ -129,44 +125,17 @@ class ApiClient {
   }
 
   // Session management
-  async createSession(sessionName = "New session"): Promise<Session> {
+  async createSession(): Promise<Session> {
     try {
       const response = await fetch(`${this.baseUrl}/apps/${APP_NAME}/users/${USER_ID}/sessions`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Accept: "application/json",
         },
-        body: JSON.stringify({
-          session_name: sessionName,
-        }),
+        body: JSON.stringify({}),
       })
 
-      if (!response.ok) {
-        throw new Error(`Failed to create session: ${response.status} ${response.statusText}`)
-      }
-
-      const contentType = response.headers.get("content-type")
-      if (!contentType || !contentType.includes("application/json")) {
-        console.error("Create session response is not JSON. Content-Type:", contentType)
-        // Return a mock session as fallback
-        const mockSessionId = `mock-${Date.now()}`
-        this.sessionId = mockSessionId
-        return {
-          id: mockSessionId,
-          app_name: APP_NAME,
-          user_id: USER_ID,
-          state: {
-            session_name: sessionName,
-          },
-          events: [],
-          last_update_time: Date.now(),
-        }
-      }
-
-      const session = await response.json()
-      this.sessionId = session.id
-      return session
+      return this.handleResponse<Session>(response, "Failed to create session")
     } catch (error) {
       console.error("Error creating session:", error)
       // Create a mock session as fallback
@@ -176,53 +145,34 @@ class ApiClient {
         id: mockSessionId,
         app_name: APP_NAME,
         user_id: USER_ID,
-        state: {
-          session_name: sessionName,
-        },
+        state: {},
         events: [],
         last_update_time: Date.now(),
       }
     }
   }
 
-  async getSession(sessionId: string): Promise<Session | null> {
+  async getSession(sessionId: string): Promise<Session> {
     try {
-      const response = await fetch(`${this.baseUrl}/apps/${APP_NAME}/users/${USER_ID}/sessions/${sessionId}`, {
-        headers: {
-          Accept: "application/json",
-        },
-      })
-
-      // If session not found (404), return null instead of throwing
-      if (response.status === 404) {
-        console.warn(`Session not found: ${sessionId}`)
-        return null
-      }
-
-      if (!response.ok) {
-        throw new Error(`Failed to get session: ${response.status} ${response.statusText}`)
-      }
-
-      const contentType = response.headers.get("content-type")
-      if (!contentType || !contentType.includes("application/json")) {
-        console.error("Get session response is not JSON. Content-Type:", contentType)
-        return null
-      }
-
-      return await response.json()
+      const response = await fetch(`${this.baseUrl}/apps/${APP_NAME}/users/${USER_ID}/sessions/${sessionId}`)
+      return this.handleResponse<Session>(response, "Failed to get session")
     } catch (error) {
       console.error("Error getting session:", error)
-      return null
+      // Return a mock session as fallback
+      return {
+        id: sessionId,
+        app_name: APP_NAME,
+        user_id: USER_ID,
+        state: {},
+        events: [],
+        last_update_time: Date.now(),
+      }
     }
   }
 
   async listSessions(): Promise<Session[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/apps/${APP_NAME}/users/${USER_ID}/sessions`, {
-        headers: {
-          Accept: "application/json",
-        },
-      })
+      const response = await fetch(`${this.baseUrl}/apps/${APP_NAME}/users/${USER_ID}/sessions`)
 
       // Log the response for debugging
       if (!response.ok) {
@@ -237,8 +187,7 @@ class ApiClient {
         return []
       }
 
-      const sessions = await response.json()
-      return Array.isArray(sessions) ? sessions : []
+      return await response.json()
     } catch (error) {
       console.error("Error listing sessions:", error)
       return []
@@ -249,14 +198,9 @@ class ApiClient {
     try {
       const response = await fetch(`${this.baseUrl}/apps/${APP_NAME}/users/${USER_ID}/sessions/${sessionId}`, {
         method: "DELETE",
-        headers: {
-          Accept: "application/json",
-        },
       })
 
-      if (!response.ok) {
-        throw new Error(`Failed to delete session: ${response.status} ${response.statusText}`)
-      }
+      await this.handleResponse<void>(response, "Failed to delete session")
     } catch (error) {
       console.error("Error deleting session:", error)
     }
@@ -292,7 +236,6 @@ class ApiClient {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Accept: "text/event-stream",
         },
         body: JSON.stringify(payload),
       })

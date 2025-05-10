@@ -137,7 +137,6 @@ export function AppSidebar() {
           <div className="flex items-center justify-between">
             <Button variant="ghost" size="icon" onClick={handleNewSession} disabled={isLoading} title="New chat">
               <Plus className="h-5 w-5" />
-              <span className="sr-only">New chat</span>
             </Button>
           </div>
         </SidebarHeader>

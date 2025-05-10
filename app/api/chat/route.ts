@@ -8,8 +8,6 @@ export async function POST(req: Request) {
     const { searchParams } = new URL(req.url);
     const sessionId = searchParams.get("sessionId") || '';
 
-
-
     // Check if we have messages to process
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return new Response("No messages provided", { status: 400 })
