@@ -1,7 +1,9 @@
 "use client"
 
+import {RedirectType} from 'next/dist/client/components/redirect-error';
 import { useState, useEffect } from "react"
 import { MessageSquare, Plus, MoreVertical, Home, Settings, Search } from "lucide-react"
+import { useSearchParams } from "next/navigation"
 import {
   Sidebar,
   SidebarContent,
@@ -20,7 +22,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { SettingsModal } from "@/components/settings-modal"
 import { apiClient } from "@/lib/api-client"
-import { ThemeAwareLogo } from "./theme-aware-logo"
+import { redirect } from "next/navigation"
 
 // Sample menu items
 const menuItems = [
@@ -43,12 +45,15 @@ const menuItems = [
 
 const defaultConversationName = "New conversation";
 export function AppSidebar() {
-  const [activeChat, setActiveChat] = useState<string | null>(null)
+  const searchParams = useSearchParams()
+  const currentSessionId = searchParams.get('session') as string | undefined
+  const [activeChat, setActiveChat] = useState<string | null>(currentSessionId || null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   // Update the sessions state to include session name
   const [sessions, setSessions] = useState<Array<{ id: string; name: string; lastMessage: string; timestamp: number }>>(
     [],
   )
+
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isNewSessionCreating, setIsNewSessionCreating] = useState(false)
@@ -63,22 +68,6 @@ export function AppSidebar() {
     // Update the loadSessions function in the useEffect
     const loadSessions = async () => {
       try {
-        // Check if there's a session ID in localStorage
-        const savedSessionId = localStorage.getItem("currentSessionId")
-
-        if (savedSessionId) {
-          // Try to get the session details
-          const session = await apiClient.getSession(savedSessionId)
-
-          if (session) {
-            // Session exists, we can use it
-            apiClient.setSessionId(savedSessionId)
-            setActiveChat(savedSessionId)
-          } else {
-            // Session doesn't exist, remove from localStorage
-            localStorage.removeItem("currentSessionId")
-          }
-        }
 
         // List available sessions
         const sessionList = await apiClient.listSessions()
@@ -91,58 +80,13 @@ export function AppSidebar() {
             lastMessage: getLastMessageFromSession(session) || defaultConversationName,
             timestamp: session.last_update_time || Date.now(),
           }))
-
           setSessions(formattedSessions)
-
-          // Set the first session as active if none is selected
-          if (!activeChat && formattedSessions.length > 0) {
-            setActiveChat(formattedSessions[0].id)
-            apiClient.setSessionId(formattedSessions[0].id)
-            localStorage.setItem("currentSessionId", formattedSessions[0].id)
-          }
-        } else if (!activeChat) {
-          // If no sessions exist and no active chat, create a new one
-          const newSession = await apiClient.createSession()
-          apiClient.setSessionId(newSession.id)
-          localStorage.setItem("currentSessionId", newSession.id)
-
-          setSessions([
-            {
-              id: newSession.id,
-              name: newSession.state?.session_name || defaultConversationName,
-              lastMessage: defaultConversationName,
-              timestamp: Date.now(),
-            },
-          ])
-
-          setActiveChat(newSession.id)
         }
-
         setIsLoading(false)
       } catch (error) {
         console.error("Error loading sessions:", error)
         setError("Failed to load sessions")
         setIsLoading(false)
-
-        // Fallback to a new session
-        try {
-          const newSession = await apiClient.createSession()
-          apiClient.setSessionId(newSession.id)
-          localStorage.setItem("currentSessionId", newSession.id)
-
-          setSessions([
-            {
-              id: newSession.id,
-              name: newSession.state?.session_name || defaultConversationName,
-              lastMessage: defaultConversationName,
-              timestamp: Date.now(),
-            },
-          ])
-
-          setActiveChat(newSession.id)
-        } catch (e) {
-          console.error("Failed to create fallback session:", e)
-        }
       }
     }
 
@@ -197,9 +141,9 @@ export function AppSidebar() {
 
   // Handle session selection
   const handleSessionSelect = (sessionId: string) => {
-    setActiveChat(sessionId)
     apiClient.setSessionId(sessionId)
-    localStorage.setItem("currentSessionId", sessionId)
+    setActiveChat(sessionId)
+    redirect(`/?session=${sessionId}`,RedirectType.replace)
   }
 
   // Update the handleNewSession function
@@ -211,10 +155,6 @@ export function AppSidebar() {
       if (!newSession || !newSession.id) {
         throw new Error("Failed to create session: Invalid response")
       }
-
-      apiClient.setSessionId(newSession.id)
-      localStorage.setItem("currentSessionId", newSession.id)
-
       // Add the new session to the list
       setSessions((prev) => [
         {
@@ -225,16 +165,15 @@ export function AppSidebar() {
         },
         ...prev,
       ])
-
+      apiClient.setSessionId(newSession.id)
       setActiveChat(newSession.id)
-      // setIsLoading(false)
+      redirect(`/?session=${newSession.id}`, RedirectType.replace)
     } catch (error) {
       console.error("Failed to create new session:", error)
 
       // Create a mock session ID as fallback
       const mockSessionId = `mock-${Date.now()}`
       apiClient.setSessionId(mockSessionId)
-      localStorage.setItem("currentSessionId", mockSessionId)
     } finally {
       setIsNewSessionCreating(false)
     }

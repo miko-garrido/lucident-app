@@ -3,8 +3,31 @@ import { SidebarTrigger } from "@/components/ui/sidebar"
 import { PanelLeft } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { ThemeAwareLogo } from "@/components/theme-aware-logo"
+import { apiClient } from "@/lib/api-client"
+import { redirect } from "next/navigation"
 
-export default function HomePage() {
+interface HomePageProps {
+  searchParams: { [key: string]: string | string[] | undefined }
+}
+
+export default async function HomePage({ searchParams }: HomePageProps) {
+  const sessionId = searchParams.session as string | undefined
+
+  // If no session ID is provided, create a new session and redirect
+  if (!sessionId) {
+    const session = await apiClient.createSession()
+    redirect(`/?session=${session.id}`)
+  }
+
+  // Fetch the session data
+  const session = await apiClient.getSession(sessionId)
+
+  // If session not found, create a new one and redirect
+  if (!session) {
+    const newSession = await apiClient.createSession()
+    redirect(`/?session=${newSession.id}`)
+  }
+
   return (
     <div className="flex h-full flex-col">
       <header className="sticky top-0 z-50 flex h-16 w-full shrink-0 items-center justify-between border-b px-4 md:px-6">
@@ -18,8 +41,8 @@ export default function HomePage() {
         </div>
         <ThemeToggle />
       </header>
-      <main className="flex flex-1 flex-col overflow-hidden">
-        <Chat />
+      <main className="flex flex-1 flex-col overflow-auto">
+        <Chat session={session} />
       </main>
     </div>
   )

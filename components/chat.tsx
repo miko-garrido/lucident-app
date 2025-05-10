@@ -1,15 +1,29 @@
 "use client"
 
-import { useChat } from "ai/react"
-import { useState, useRef, useEffect } from "react"
+import { useChat, Message } from "ai/react"
+import {RedirectType} from 'next/dist/client/components/redirect-error';
+import { useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { ChatMessage } from "@/components/chat-message"
 import { ArrowUp, Paperclip, Plus } from "lucide-react"
 import { apiClient } from "@/lib/api-client"
+import { Session } from "@/lib/api-client"
+import { redirect } from "next/navigation"
 
-export function Chat() {
+
+interface ChatProps {
+  session: Session
+}
+
+type ChatMessageType = {
+  id: string
+  role: "user" | "assistant" | "system"
+  content: string
+}
+
+export function Chat({ session }: ChatProps) {
   const { messages, input, handleInputChange, handleSubmit, isLoading, error, setMessages } = useChat({
     api: "/api/chat",
     onResponse: (response) => {
@@ -23,8 +37,6 @@ export function Chat() {
 
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-  const [isMounted, setIsMounted] = useState(false)
-  const [sessions, setSessions] = useState<Array<{ id: string; lastMessage: string }>>([])
 
   // Example suggested prompts
   const suggestedPrompts = [
@@ -46,80 +58,30 @@ export function Chat() {
     },
   ]
 
+  console.log('session', session)
   // Initialize session on mount
   useEffect(() => {
-    if (!isMounted) {
-      setIsMounted(true)
 
-      // Focus on the input field
-      setTimeout(() => {
-        inputRef.current?.focus()
-      }, 100)
+    // Focus on the input field
+    setTimeout(() => {
+      inputRef.current?.focus()
+    }, 100)
 
-      // Initialize a session or load existing sessions
-      const initializeSession = async () => {
-        try {
-          // Check if there's a session ID in localStorage
-          const savedSessionId = localStorage.getItem("currentSessionId")
-          console.log('savedSessionId', savedSessionId)
-          if (savedSessionId) {
-            // Try to get the session details
-            const session = await apiClient.getSession(savedSessionId)
+    // Set the session ID
+    apiClient.setSessionId(session.id)
 
-            if (session) {
-              // Session exists, we can use it
-              apiClient.setSessionId(savedSessionId)
-            } else {
-              // Session doesn't exist, remove from localStorage and create a new one
-              localStorage.removeItem("currentSessionId")
-              const newSession = await apiClient.createSession()
-              apiClient.setSessionId(newSession.id)
-              localStorage.setItem("currentSessionId", newSession.id)
-            }
-          } else {
-            // No saved session, list available sessions
-            const sessionList = await apiClient.listSessions()
-
-            if (sessionList.length > 0) {
-              // Use the most recent session
-              const latestSession = sessionList[0]
-              apiClient.setSessionId(latestSession.id)
-              localStorage.setItem("currentSessionId", latestSession.id)
-            } else {
-              // Create a new session
-              const newSession = await apiClient.createSession()
-              apiClient.setSessionId(newSession.id)
-              localStorage.setItem("currentSessionId", newSession.id)
-            }
-          }
-        } catch (error) {
-          console.error("Failed to initialize session:", error)
-
-          // Create a new session as fallback
-          try {
-            const newSession = await apiClient.createSession()
-            apiClient.setSessionId(newSession.id)
-            localStorage.setItem("currentSessionId", newSession.id)
-          } catch (e) {
-            console.error("Failed to create fallback session:", e)
-          }
-        }
-      }
-
-      initializeSession()
+    // Convert session events to messages if they exist
+    if (session.events && session.events.length > 0) {
+      const initialMessages: Message[] = session.events.map(event => ({
+        id: event.id,
+        role: event.author === "user" ? "user" : "assistant",
+        content: event.content?.parts?.[0]?.text || ""
+      }))
+      setMessages(initialMessages)
+    } else {
+      setMessages([])
     }
-  }, [isMounted])
-
-  // Helper function to extract the last message from a session
-  const getLastMessageFromSession = (session: any) => {
-    if (session?.events && Array.isArray(session.events) && session.events.length > 0) {
-      const lastEvent = session.events[session.events.length - 1]
-      if (lastEvent?.content?.parts?.[0]?.text) {
-        return lastEvent.content.parts[0].text
-      }
-    }
-    return "New conversation"
-  }
+  }, [session, setMessages])
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -133,21 +95,25 @@ export function Chat() {
 
   const handlePromptClick = (prompt: string) => {
     const fullPrompt = prompt.replace("\n", " ")
-    handleSubmit(new Event("submit") as any, { prompt: fullPrompt })
+    handleSubmit(new Event("submit") as any)
   }
 
   // Create a new chat session
   const handleNewChat = async () => {
     try {
       const newSession = await apiClient.createSession()
-      apiClient.setSessionId(newSession.id)
-      localStorage.setItem("currentSessionId", newSession.id)
-      // Reset the chat UI
-      window.location.reload()
+      redirect(`/?session=${newSession.id}`,RedirectType.replace)
     } catch (error) {
       console.error("Failed to create new session:", error)
     }
   }
+
+  // Convert AI messages to ChatMessageType
+  const convertMessage = (message: Message): ChatMessageType => ({
+    id: message.id,
+    role: message.role === "data" ? "assistant" : message.role,
+    content: message.content
+  })
 
   return (
     <div className="flex h-full flex-col items-center">
@@ -160,7 +126,7 @@ export function Chat() {
                 <p className="text-2xl text-muted-foreground">How can I help you today?</p>
               </div>
             ) : (
-              messages.map((message) => <ChatMessage key={message.id} message={message} />)
+              messages.map((message) => <ChatMessage key={message.id} message={convertMessage(message)} />)
             )}
             {isLoading && messages.length > 0 && (
               <ChatMessage

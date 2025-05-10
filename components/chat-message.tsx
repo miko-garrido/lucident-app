@@ -1,5 +1,10 @@
 import { cn } from "@/lib/utils"
 import ReactMarkdown from "react-markdown"
+import remarkGfm from 'remark-gfm'
+import remarkBreaks from 'remark-breaks'
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import { Components } from 'react-markdown'
 
 interface ChatMessageProps {
   message: {
@@ -13,6 +18,98 @@ interface ChatMessageProps {
 export function ChatMessage({ message, isLoading = false }: ChatMessageProps) {
   const isUser = message.role === "user"
 
+  const components: Components = {
+    // Style code blocks
+    code({ className, children, ...props }) {
+      const match = /language-(\w+)/.exec(className || '')
+      return match ? (
+        <div className="relative my-4 rounded-lg overflow-hidden">
+          <SyntaxHighlighter
+            language={match[1]}
+            PreTag="div"
+            style={vscDarkPlus}
+            customStyle={{
+              margin: 0,
+              padding: '1rem',
+              background: 'hsl(var(--muted))',
+              borderRadius: '0.5rem',
+            }}
+          >
+            {String(children).replace(/\n$/, '')}
+          </SyntaxHighlighter>
+        </div>
+      ) : (
+        <code className="bg-muted px-1.5 py-0.5 rounded-md text-sm font-mono" {...props}>
+          {children}
+        </code>
+      )
+    },
+    // Style lists
+    ul: ({ children }) => (
+      <ul className="list-disc pl-6 space-y-2 my-4 text-muted-foreground">{children}</ul>
+    ),
+    ol: ({ children }) => (
+      <ol className="list-decimal pl-6 space-y-2 my-4 text-muted-foreground">{children}</ol>
+    ),
+    // Style list items
+    li: ({ children }) => (
+      <li className="leading-7">{children}</li>
+    ),
+    // Style blockquotes
+    blockquote: ({ children }) => (
+      <blockquote className="border-l-4 border-muted-foreground pl-4 my-4 italic text-muted-foreground">
+        {children}
+      </blockquote>
+    ),
+    // Style paragraphs
+    p: ({ children }) => (
+      <p className="my-3 leading-7 text-muted-foreground">{children}</p>
+    ),
+    // Style headings
+    h1: ({ children }) => (
+      <h1 className="text-2xl font-bold my-4 text-foreground">{children}</h1>
+    ),
+    h2: ({ children }) => (
+      <h2 className="text-xl font-bold my-3 text-foreground">{children}</h2>
+    ),
+    h3: ({ children }) => (
+      <h3 className="text-lg font-bold my-2 text-foreground">{children}</h3>
+    ),
+    // Style links
+    a: ({ href, children }) => (
+      <a 
+        href={href} 
+        className="text-primary underline underline-offset-4 hover:text-primary/80 transition-colors" 
+        target="_blank" 
+        rel="noopener noreferrer"
+      >
+        {children}
+      </a>
+    ),
+    // Style horizontal rule
+    hr: () => (
+      <hr className="my-6 border-muted-foreground/20" />
+    ),
+    // Style tables
+    table: ({ children }) => (
+      <div className="my-4 overflow-x-auto">
+        <table className="w-full border-collapse text-sm">
+          {children}
+        </table>
+      </div>
+    ),
+    th: ({ children }) => (
+      <th className="border border-muted-foreground/20 px-4 py-2 text-left font-medium bg-muted">
+        {children}
+      </th>
+    ),
+    td: ({ children }) => (
+      <td className="border border-muted-foreground/20 px-4 py-2">
+        {children}
+      </td>
+    ),
+  }
+
   return (
     <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
       <div
@@ -23,8 +120,13 @@ export function ChatMessage({ message, isLoading = false }: ChatMessageProps) {
           isLoading && "animate-pulse",
         )}
       >
-        <div className="prose dark:prose-invert max-w-none">
-          <ReactMarkdown>{message.content}</ReactMarkdown>
+        <div className="prose dark:prose-invert max-w-none prose-pre:bg-transparent prose-pre:p-0">
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm, remarkBreaks]}
+            components={components}
+          >
+            {message.content}
+          </ReactMarkdown>
         </div>
       </div>
     </div>
