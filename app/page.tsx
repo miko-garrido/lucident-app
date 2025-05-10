@@ -1,3 +1,4 @@
+import {Chat} from '@/components/chat';
 import { MockChat } from "@/components/mock-chat"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { PanelLeft } from "lucide-react"

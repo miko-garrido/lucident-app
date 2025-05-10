@@ -169,7 +169,7 @@ export function Chat({ sessionId }: ChatProps) {
   return (
     <div className="flex h-full flex-col items-center">
       <div className="flex w-full max-w-3xl flex-1 flex-col px-4">
-        <ScrollArea ref={scrollAreaRef} className="flex-1 py-6" viewportClassName="h-full">
+        <ScrollArea ref={scrollAreaRef} className="flex-1 py-6">
           <div className="space-y-6 pb-20" data-chat-messages>
             {messages.length === 0 ? (
               <div className="flex min-h-[30vh] flex-col items-start justify-center space-y-2">

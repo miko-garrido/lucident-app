@@ -1,5 +1,6 @@
 "use client"
 
+import {ThemeAwareLogo} from '@/components/theme-aware-logo';
 import {useEffect, useState} from "react"
 import { MessageSquare, Plus, MoreVertical, Home, Settings, Search, Trash2 } from "lucide-react"
 import { useSearchParams, useRouter } from "next/navigation"
@@ -135,8 +136,9 @@ export function AppSidebar() {
       <Sidebar className="border-r">
         <SidebarHeader className="flex flex-col gap-2 px-3 py-2">
           <div className="flex items-center justify-between">
+            <div className="flex items-center px-2 py-1"><ThemeAwareLogo className="h-6 w-auto"/></div>
             <Button variant="ghost" size="icon" onClick={handleNewSession} disabled={isLoading} title="New chat">
-              <Plus className="h-5 w-5" />
+              <Plus className="h-5 w-5"/>
             </Button>
           </div>
         </SidebarHeader>

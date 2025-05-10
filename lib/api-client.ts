@@ -228,7 +228,7 @@ class ApiClient {
           }
         ]
       },
-      streaming: true,
+      streaming: false,
     }
 
     try {
