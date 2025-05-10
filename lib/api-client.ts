@@ -302,10 +302,30 @@ class ApiClient {
         throw new Error(`Failed to send message: ${response.status}. Details: ${errorText}`)
       }
 
-      // After successful message send, refresh the session
-      await this.getSession(this.sessionId!)
+      const textDecoder = new TextDecoder()
+      const textEncoder = new TextEncoder()
+      const reader = response.body!.getReader()
+      const sseStream = new ReadableStream({
+        async start(controller) {
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
 
-      return response.body!
+            try {
+              const chunk = textDecoder.decode(value, { stream: true })
+              const parsed = JSON.parse(chunk?.split('data: ')?.[1] || '{}')
+              if (parsed.content?.parts?.[0]?.text) {
+                controller.enqueue(textEncoder.encode(`${parsed.content?.parts?.[0]?.text}`))
+              }
+            } catch (err) {
+
+            }
+          }
+          controller.close()
+        },
+      })
+
+      return sseStream
     } catch (error) {
       console.error("Error sending message:", error)
 
@@ -314,9 +334,7 @@ class ApiClient {
       return new ReadableStream({
         start(controller) {
           controller.enqueue(
-            encoder.encode(
-              `data: ${JSON.stringify({ text: "Sorry, I couldn't connect to the server. Please try again later." })}\n\n`,
-            ),
+            encoder.encode("Sorry, I couldn't connect to the server. Please try again later."),
           )
           controller.enqueue(encoder.encode("data: [DONE]\n\n"))
           controller.close()

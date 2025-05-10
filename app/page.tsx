@@ -11,9 +11,8 @@ interface HomePageProps {
 }
 
 export default async function HomePage({ searchParams }: HomePageProps) {
-  const sessionId = Array.isArray(searchParams.session)
-    ? searchParams.session[0]
-    : searchParams.session;
+  const { session: sessionParam } = await searchParams
+  const sessionId = Array.isArray(sessionParam) ? sessionParam[0] : sessionParam
 
   // If no session ID is provided, create a new session and redirect
   if (!sessionId) {
