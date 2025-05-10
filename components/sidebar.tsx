@@ -2,7 +2,7 @@
 
 import {RedirectType} from 'next/dist/client/components/redirect-error';
 import { useState, useEffect } from "react"
-import { MessageSquare, Plus, MoreVertical, Home, Settings, Search } from "lucide-react"
+import { MessageSquare, Plus, MoreVertical, Home, Settings, Search, Trash2 } from "lucide-react"
 import { useSearchParams } from "next/navigation"
 import {
   Sidebar,
@@ -20,6 +20,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { SettingsModal } from "@/components/settings-modal"
 import { apiClient } from "@/lib/api-client"
 import { redirect } from "next/navigation"
@@ -49,6 +50,9 @@ export function AppSidebar() {
   const currentSessionId = searchParams.get('session') as string | undefined
   const [activeChat, setActiveChat] = useState<string | null>(currentSessionId || null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [sessionToDelete, setSessionToDelete] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   // Update the sessions state to include session name
   const [sessions, setSessions] = useState<Array<{ id: string; name: string; lastMessage: string; timestamp: number }>>(
     [],
@@ -79,7 +83,7 @@ export function AppSidebar() {
             name: session.state?.session_name || defaultConversationName,
             lastMessage: getLastMessageFromSession(session) || defaultConversationName,
             timestamp: session.last_update_time || Date.now(),
-          }))
+          })).reverse();
           setSessions(formattedSessions)
         }
         setIsLoading(false)
@@ -179,6 +183,31 @@ export function AppSidebar() {
     }
   }
 
+  // Handle session deletion
+  const handleDeleteSession = async () => {
+    if (!sessionToDelete) return
+
+    try {
+      setIsDeleting(true)
+      await apiClient.deleteSession(sessionToDelete)
+
+      // Remove the session from the list
+      setSessions(prev => prev.filter(session => session.id !== sessionToDelete))
+
+      // // If the deleted session was active, redirect to a new session
+      // if (sessionToDelete === activeChat) {
+      //   const newSession = await apiClient.createSession()
+      //   redirect(`/?session=${newSession.id}`, RedirectType.replace)
+      // }
+    } catch (error) {
+      console.error("Failed to delete session:", error)
+    } finally {
+      setIsDeleting(false)
+      setDeleteDialogOpen(false)
+      setSessionToDelete(null)
+    }
+  }
+
   return (
     <>
       <Sidebar className="border-r">
@@ -240,7 +269,7 @@ export function AppSidebar() {
                             <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-primary"></div>
                             <span className="ml-2 text-sm text-muted-foreground">Creating new session...</span>
                           </div>
-                      </SidebarMenuItem>}
+                        </SidebarMenuItem>}
                       {dateSessions.map((session) => (
                         <SidebarMenuItem key={session.id}>
                           <SidebarMenuButton
@@ -252,17 +281,33 @@ export function AppSidebar() {
                               <MessageSquare className="mr-3 h-4 w-4" />
                               <span className="truncate">{session.name || defaultConversationName}</span>
                             </div>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 data-[active=true]:opacity-100"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                // ToDo: handle any action on more icon
-                              }}
-                            >
-                              <MoreVertical className="h-4 w-4" />
-                            </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 data-[active=true]:opacity-100"
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                  }}
+                                >
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  className="text-destructive cursor-pointer focus:text-destructive"
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    setSessionToDelete(session.id)
+                                    setDeleteDialogOpen(true)
+                                  }}
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </SidebarMenuButton>
                         </SidebarMenuItem>
                       ))}
@@ -308,6 +353,35 @@ export function AppSidebar() {
       </Sidebar>
 
       <SettingsModal open={settingsOpen} onOpenChange={setSettingsOpen} />
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the chat session
+              and all its messages.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteSession}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? (
+                <>
+                  <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  Deleting...
+                </>
+              ) : (
+                'Delete'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }
