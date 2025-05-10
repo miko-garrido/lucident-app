@@ -1,9 +1,9 @@
 "use client"
 
-import { useSession } from '@/lib/session-context';
-import { useChat, Message } from "@ai-sdk/react"
+import {useSession} from '@/lib/session-context';
+import { useChat, Message } from "ai/react"
 
-import {useRef, useEffect, useState, FormEvent, ChangeEvent} from "react"
+import {useRef, useEffect, useState, FormEvent} from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -25,20 +25,18 @@ type ChatMessageType = {
 }
 
 export function Chat({ sessionId }: ChatProps) {
-  const { messages, input, setInput, handleSubmit, isLoading, handleInputChange, error, setMessages } = useChat({
+  const { messages, input, setInput, handleInputChange, error, setMessages } = useChat({
     api: `/api/chat?sessionId=${sessionId}`,
-    streamProtocol: 'text',
     onResponse: async (response) => {
-
+      // Refresh the session after each message
+      // await refreshSessions()
     },
     onError: (error) => {
       console.error("Chat error:", error)
     },
   })
-  const formRef = useRef<HTMLFormElement>(null);
-
   const [storedSession, setStoredSession] = useState<Session | null>(null);
-  const [loadingSessionDetails, setLoadingSessionDetails] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const { refreshSessions } = useSession();
   const router = useRouter()
 
@@ -66,16 +64,17 @@ export function Chat({ sessionId }: ChatProps) {
   ]
 
   const fetchSession = async () => {
-    setLoadingSessionDetails(true);
     try {
       const session = await apiClient.getSession(sessionId);
       setStoredSession(session);
     }catch (err) {
       console.error("Error fetching session:", err)
-    } finally {
-      setLoadingSessionDetails(false);
     }
   };
+
+  useEffect(() => {
+    fetchSession();
+  }, []);
 
   // Initialize session on mount
   useEffect(() => {
@@ -89,55 +88,48 @@ export function Chat({ sessionId }: ChatProps) {
     apiClient.setSessionId(sessionId)
   }, [sessionId, setMessages])
 
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setMessages([...messages, { id: Date.now().toString(), role: "user", content: JSON.stringify([{ text: input }]) }])
+    setInput('');
+    try {
+      await apiClient.sendMessage(input, storedSession?.id);
+      await fetchSession();
+      setIsLoading(false);
+    } catch (err) {
+      console.error("Error sending message:", err)
+      setIsLoading(false);
+    }
+  }
+
   useEffect(() => {
     // Convert session events to messages if they exist
     if (storedSession?.events && storedSession.events.length > 0) {
       const initialMessages: Message[] = storedSession.events.map(event => ({
         id: event.id,
-        role: (event.author === "user" ? "user" : "assistant") as 'system' | 'user' | 'assistant' | 'data',
-        content: event.content?.parts?.[0].text || '',
-      })).filter(message => message.content.trim() !== '');
+        role: event.author === "user" ? "user" : "assistant",
+        content: JSON.stringify(event.content?.parts ?? []),
+      }))
       setMessages(initialMessages)
     } else {
       setMessages([])
     }
   }, [storedSession]);
 
-  // Scroll to bottom when messages change or content updates
+  // Scroll to bottom when messages change
   useEffect(() => {
-    const element = document.getElementById('main-content');
-    const scrollToBottom = () => {
-      if (element) {
-        element.scrollTo({
-          top: element.scrollHeight,
-          behavior: "smooth",
-        })
-      }
-    }
-
-    // Create a MutationObserver to watch for content changes
-    const observer = new MutationObserver(scrollToBottom)
-
-    if (element) {
-      observer.observe(element, {
-        childList: true,
-        subtree: true,
-        characterData: true,
+    if (scrollAreaRef.current) {
+      scrollAreaRef.current.scrollTo({
+        top: scrollAreaRef.current.scrollHeight,
+        behavior: "smooth",
       })
     }
-
-    // Initial scroll
-    scrollToBottom()
-
-    return () => observer.disconnect()
   }, [messages])
 
-  const handlePromptClick = async (prompt: string) => {
-    // setInput(prompt.replace("\n", " "))
-    handleInputChange({ target: { value: prompt.replace("\n", " ") } } as ChangeEvent<HTMLInputElement> | ChangeEvent<HTMLTextAreaElement>)
-    setTimeout(() => {
-      formRef.current?.requestSubmit();
-    }, 2000)
+  const handlePromptClick = (prompt: string) => {
+    const fullPrompt = prompt.replace("\n", " ")
+    handleSubmit(new Event("submit") as any)
   }
 
   // Create a new chat session
@@ -158,14 +150,6 @@ export function Chat({ sessionId }: ChatProps) {
     content: message.content
   })
 
-  if (loadingSessionDetails) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <p className="text-muted-foreground">Loading session details...</p>
-      </div>
-    )
-  }
-
   return (
     <div className="flex h-full flex-col items-center">
       <div className="flex w-full max-w-3xl flex-1 flex-col px-4">
@@ -184,7 +168,7 @@ export function Chat({ sessionId }: ChatProps) {
                 message={{
                   id: "loading",
                   role: "assistant",
-                  content: "Thinking..."
+                  content: JSON.stringify([{ text: "Thinking..." }]),
                 }}
                 isLoading
               />
@@ -216,7 +200,7 @@ export function Chat({ sessionId }: ChatProps) {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} ref={formRef} className="flex items-center gap-2 rounded-full bg-muted p-2 pl-4">
+          <form onSubmit={handleSubmit} className="flex items-center gap-2 rounded-full bg-muted p-2 pl-4">
             <Button
               type="button"
               variant="ghost"

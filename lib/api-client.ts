@@ -15,7 +15,10 @@ export interface Session {
   id: string
   app_name: string
   user_id: string
-  state: Record<string, any>
+  state: {
+    session_name?: string
+    [key: string]: any
+  }
   events: Event[]
   last_update_time: number
 }
@@ -71,7 +74,7 @@ class ApiClient {
   private baseUrl: string
   private sessionId: string | null = null
 
-  constructor(baseUrl = "/api") {
+  constructor(baseUrl = "https://api.lucident.ai/") {
     this.baseUrl = baseUrl
   }
 
@@ -105,8 +108,9 @@ class ApiClient {
       return (await response.json()) as T
     }
 
-    // If not JSON, return the response itself
-    return response as unknown as T
+    // If not JSON, return a default object for the expected type
+    console.warn("Response is not JSON. Content-Type:", contentType)
+    return {} as T
   }
 
   async debugTrace(traceId: string): Promise<any> {
@@ -125,17 +129,44 @@ class ApiClient {
   }
 
   // Session management
-  async createSession(): Promise<Session> {
+  async createSession(sessionName = "New session"): Promise<Session> {
     try {
       const response = await fetch(`${this.baseUrl}/apps/${APP_NAME}/users/${USER_ID}/sessions`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Accept: "application/json",
         },
-        body: JSON.stringify({}),
+        body: JSON.stringify({
+          session_name: sessionName,
+        }),
       })
 
-      return this.handleResponse<Session>(response, "Failed to create session")
+      if (!response.ok) {
+        throw new Error(`Failed to create session: ${response.status} ${response.statusText}`)
+      }
+
+      const contentType = response.headers.get("content-type")
+      if (!contentType || !contentType.includes("application/json")) {
+        console.error("Create session response is not JSON. Content-Type:", contentType)
+        // Return a mock session as fallback
+        const mockSessionId = `mock-${Date.now()}`
+        this.sessionId = mockSessionId
+        return {
+          id: mockSessionId,
+          app_name: APP_NAME,
+          user_id: USER_ID,
+          state: {
+            session_name: sessionName,
+          },
+          events: [],
+          last_update_time: Date.now(),
+        }
+      }
+
+      const session = await response.json()
+      this.sessionId = session.id
+      return session
     } catch (error) {
       console.error("Error creating session:", error)
       // Create a mock session as fallback
@@ -145,34 +176,53 @@ class ApiClient {
         id: mockSessionId,
         app_name: APP_NAME,
         user_id: USER_ID,
-        state: {},
+        state: {
+          session_name: sessionName,
+        },
         events: [],
         last_update_time: Date.now(),
       }
     }
   }
 
-  async getSession(sessionId: string): Promise<Session> {
+  async getSession(sessionId: string): Promise<Session | null> {
     try {
-      const response = await fetch(`${this.baseUrl}/apps/${APP_NAME}/users/${USER_ID}/sessions/${sessionId}`)
-      return this.handleResponse<Session>(response, "Failed to get session")
+      const response = await fetch(`${this.baseUrl}/apps/${APP_NAME}/users/${USER_ID}/sessions/${sessionId}`, {
+        headers: {
+          Accept: "application/json",
+        },
+      })
+
+      // If session not found (404), return null instead of throwing
+      if (response.status === 404) {
+        console.warn(`Session not found: ${sessionId}`)
+        return null
+      }
+
+      if (!response.ok) {
+        throw new Error(`Failed to get session: ${response.status} ${response.statusText}`)
+      }
+
+      const contentType = response.headers.get("content-type")
+      if (!contentType || !contentType.includes("application/json")) {
+        console.error("Get session response is not JSON. Content-Type:", contentType)
+        return null
+      }
+
+      return await response.json()
     } catch (error) {
       console.error("Error getting session:", error)
-      // Return a mock session as fallback
-      return {
-        id: sessionId,
-        app_name: APP_NAME,
-        user_id: USER_ID,
-        state: {},
-        events: [],
-        last_update_time: Date.now(),
-      }
+      return null
     }
   }
 
   async listSessions(): Promise<Session[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/apps/${APP_NAME}/users/${USER_ID}/sessions`)
+      const response = await fetch(`${this.baseUrl}/apps/${APP_NAME}/users/${USER_ID}/sessions`, {
+        headers: {
+          Accept: "application/json",
+        },
+      })
 
       // Log the response for debugging
       if (!response.ok) {
@@ -187,7 +237,8 @@ class ApiClient {
         return []
       }
 
-      return await response.json()
+      const sessions = await response.json()
+      return Array.isArray(sessions) ? sessions : []
     } catch (error) {
       console.error("Error listing sessions:", error)
       return []
@@ -198,9 +249,14 @@ class ApiClient {
     try {
       const response = await fetch(`${this.baseUrl}/apps/${APP_NAME}/users/${USER_ID}/sessions/${sessionId}`, {
         method: "DELETE",
+        headers: {
+          Accept: "application/json",
+        },
       })
 
-      await this.handleResponse<void>(response, "Failed to delete session")
+      if (!response.ok) {
+        throw new Error(`Failed to delete session: ${response.status} ${response.statusText}`)
+      }
     } catch (error) {
       console.error("Error deleting session:", error)
     }
@@ -228,7 +284,7 @@ class ApiClient {
           }
         ]
       },
-      streaming: false,
+      streaming: true,
     }
 
     try {
@@ -236,6 +292,7 @@ class ApiClient {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Accept: "text/event-stream",
         },
         body: JSON.stringify(payload),
       })
@@ -245,30 +302,10 @@ class ApiClient {
         throw new Error(`Failed to send message: ${response.status}. Details: ${errorText}`)
       }
 
-      const textDecoder = new TextDecoder()
-      const textEncoder = new TextEncoder()
-      const reader = response.body!.getReader()
-      const sseStream = new ReadableStream({
-        async start(controller) {
-          while (true) {
-            const { done, value } = await reader.read()
-            if (done) break
+      // After successful message send, refresh the session
+      await this.getSession(this.sessionId!)
 
-            try {
-              const chunk = textDecoder.decode(value, { stream: true })
-              const parsed = JSON.parse(chunk?.split('data: ')?.[1] || '{}')
-              if (parsed.content?.parts?.[0]?.text) {
-                controller.enqueue(textEncoder.encode(`${parsed.content?.parts?.[0]?.text}`))
-              }
-            } catch (err) {
-
-            }
-          }
-          controller.close()
-        },
-      })
-
-      return sseStream
+      return response.body!
     } catch (error) {
       console.error("Error sending message:", error)
 
@@ -277,7 +314,9 @@ class ApiClient {
       return new ReadableStream({
         start(controller) {
           controller.enqueue(
-            encoder.encode("Sorry, I couldn't connect to the server. Please try again later."),
+            encoder.encode(
+              `data: ${JSON.stringify({ text: "Sorry, I couldn't connect to the server. Please try again later." })}\n\n`,
+            ),
           )
           controller.enqueue(encoder.encode("data: [DONE]\n\n"))
           controller.close()
