@@ -44,7 +44,6 @@ export function Chat({ sessionId }: ChatProps) {
 
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Example suggested prompts
   const suggestedPrompts = [
