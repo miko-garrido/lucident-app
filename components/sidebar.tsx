@@ -41,6 +41,7 @@ const menuItems = [
   },
 ]
 
+const defaultConversationName = "New conversation";
 export function AppSidebar() {
   const [activeChat, setActiveChat] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -50,16 +51,11 @@ export function AppSidebar() {
   )
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [mounted, setMounted] = useState(false)
+  const [isNewSessionCreating, setIsNewSessionCreating] = useState(false)
 
-  // Set mounted state after component mounts to avoid hydration mismatch
-  useEffect(() => {
-    setMounted(true)
-  }, [])
 
   // Load sessions on mount
   useEffect(() => {
-    if (!mounted) return
 
     setIsLoading(true)
     setError(null)
@@ -91,8 +87,8 @@ export function AppSidebar() {
           // Transform the sessions into the format we need
           const formattedSessions = sessionList.map((session) => ({
             id: session.id,
-            name: session.state?.session_name || "New conversation",
-            lastMessage: getLastMessageFromSession(session) || "New conversation",
+            name: session.state?.session_name || defaultConversationName,
+            lastMessage: getLastMessageFromSession(session) || defaultConversationName,
             timestamp: session.last_update_time || Date.now(),
           }))
 
@@ -113,8 +109,8 @@ export function AppSidebar() {
           setSessions([
             {
               id: newSession.id,
-              name: newSession.state?.session_name || "New conversation",
-              lastMessage: "New conversation",
+              name: newSession.state?.session_name || defaultConversationName,
+              lastMessage: defaultConversationName,
               timestamp: Date.now(),
             },
           ])
@@ -137,8 +133,8 @@ export function AppSidebar() {
           setSessions([
             {
               id: newSession.id,
-              name: newSession.state?.session_name || "New conversation",
-              lastMessage: "New conversation",
+              name: newSession.state?.session_name || defaultConversationName,
+              lastMessage: defaultConversationName,
               timestamp: Date.now(),
             },
           ])
@@ -151,7 +147,7 @@ export function AppSidebar() {
     }
 
     loadSessions()
-  }, [mounted, activeChat])
+  }, [])
 
   // Helper function to extract the last message from a session
   const getLastMessageFromSession = (session: any) => {
@@ -164,13 +160,13 @@ export function AppSidebar() {
         }
       }
     }
-    return "New conversation"
+    return defaultConversationName
   }
 
   // Group sessions by date
   const groupedSessions = sessions.reduce(
     (acc, session) => {
-      const date = new Date(session.timestamp)
+      const date = new Date(session.timestamp * 1000)
       const today = new Date()
       const yesterday = new Date(today)
       yesterday.setDate(yesterday.getDate() - 1)
@@ -204,15 +200,13 @@ export function AppSidebar() {
     setActiveChat(sessionId)
     apiClient.setSessionId(sessionId)
     localStorage.setItem("currentSessionId", sessionId)
-    // Reload the page to refresh the chat
-    window.location.reload()
   }
 
   // Update the handleNewSession function
   const handleNewSession = async () => {
     try {
-      setIsLoading(true)
-      const newSession = await apiClient.createSession("New session")
+      setIsNewSessionCreating(true)
+      const newSession = await apiClient.createSession(defaultConversationName)
 
       if (!newSession || !newSession.id) {
         throw new Error("Failed to create session: Invalid response")
@@ -225,27 +219,24 @@ export function AppSidebar() {
       setSessions((prev) => [
         {
           id: newSession.id,
-          name: newSession.state?.session_name || "New conversation",
-          lastMessage: "New conversation",
-          timestamp: Date.now(),
+          name: newSession.state?.session_name || defaultConversationName,
+          lastMessage: defaultConversationName,
+          timestamp: Date.now() / 1000,
         },
         ...prev,
       ])
 
       setActiveChat(newSession.id)
-      setIsLoading(false)
-
-      // Reload the page to refresh the chat and focus on input
-      window.location.reload()
+      // setIsLoading(false)
     } catch (error) {
       console.error("Failed to create new session:", error)
-      setIsLoading(false)
 
       // Create a mock session ID as fallback
       const mockSessionId = `mock-${Date.now()}`
       apiClient.setSessionId(mockSessionId)
       localStorage.setItem("currentSessionId", mockSessionId)
-      window.location.reload()
+    } finally {
+      setIsNewSessionCreating(false)
     }
   }
 
@@ -254,7 +245,7 @@ export function AppSidebar() {
       <Sidebar className="border-r">
         <SidebarHeader className="flex flex-col gap-2 px-3 py-2">
           <div className="flex items-center justify-between">
-            <div className="flex items-center px-2 py-1">{mounted && <ThemeAwareLogo className="h-6 w-auto" />}</div>
+            {/*<div className="flex items-center px-2 py-1">{mounted && <ThemeAwareLogo className="h-6 w-auto" />}</div>*/}
             <Button variant="ghost" size="icon" onClick={handleNewSession} disabled={isLoading} title="New chat">
               <Plus className="h-5 w-5" />
               <span className="sr-only">New chat</span>
@@ -271,7 +262,7 @@ export function AppSidebar() {
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton asChild>
                       <a href={item.url}>
-                        <item.icon className="h-4 w-4" />
+                        <item.icon className="h-4 w-4"/>
                         <span>{item.title}</span>
                       </a>
                     </SidebarMenuButton>
@@ -304,6 +295,13 @@ export function AppSidebar() {
                   <div key={date} className="mb-4">
                     <h2 className="mb-2 px-3 pt-2 text-xs text-muted-foreground">{date}</h2>
                     <SidebarMenu className="space-y-1.5">
+                      {isNewSessionCreating &&
+                        <SidebarMenuItem>
+                          <div className="flex items-center justify-center p-4">
+                            <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-primary"></div>
+                            <span className="ml-2 text-sm text-muted-foreground">Creating new session...</span>
+                          </div>
+                      </SidebarMenuItem>}
                       {dateSessions.map((session) => (
                         <SidebarMenuItem key={session.id}>
                           <SidebarMenuButton
@@ -313,12 +311,16 @@ export function AppSidebar() {
                           >
                             <div className="flex items-center">
                               <MessageSquare className="mr-3 h-4 w-4" />
-                              <span className="truncate">{session.name || "New conversation"}</span>
+                              <span className="truncate">{session.name || defaultConversationName}</span>
                             </div>
                             <Button
                               variant="ghost"
                               size="icon"
                               className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100 data-[active=true]:opacity-100"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                // ToDo: handle any action on more icon
+                              }}
                             >
                               <MoreVertical className="h-4 w-4" />
                             </Button>

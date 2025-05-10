@@ -61,7 +61,7 @@ export function Chat() {
         try {
           // Check if there's a session ID in localStorage
           const savedSessionId = localStorage.getItem("currentSessionId")
-
+          console.log('savedSessionId', savedSessionId)
           if (savedSessionId) {
             // Try to get the session details
             const session = await apiClient.getSession(savedSessionId)
