@@ -78,12 +78,14 @@ export function AppSidebar() {
 
         if (sessionList && sessionList.length > 0) {
           // Transform the sessions into the format we need
-          const formattedSessions = sessionList.map((session) => ({
-            id: session.id,
-            name: session.state?.session_name || defaultConversationName,
-            lastMessage: getLastMessageFromSession(session) || defaultConversationName,
-            timestamp: session.last_update_time || Date.now(),
-          })).reverse();
+          const formattedSessions = sessionList
+            .map((session) => ({
+              id: session.id,
+              name: session.state?.session_name || defaultConversationName,
+              lastMessage: getLastMessageFromSession(session) || defaultConversationName,
+              timestamp: session.last_update_time || Date.now(),
+            }))
+            .sort((a, b) => b.timestamp - a.timestamp);
           setSessions(formattedSessions)
         }
         setIsLoading(false)
