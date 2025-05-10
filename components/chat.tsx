@@ -25,7 +25,7 @@ type ChatMessageType = {
 }
 
 export function Chat({ sessionId }: ChatProps) {
-  const { messages, input, setInput, handleInputChange, isLoading, error, setMessages } = useChat({
+  const { messages, input, setInput, handleInputChange, error, setMessages } = useChat({
     api: `/api/chat?sessionId=${sessionId}`,
     onResponse: async (response) => {
       // Refresh the session after each message
@@ -36,6 +36,7 @@ export function Chat({ sessionId }: ChatProps) {
     },
   })
   const [storedSession, setStoredSession] = useState<Session | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const { refreshSessions } = useSession();
   const router = useRouter()
 
@@ -85,13 +86,16 @@ export function Chat({ sessionId }: ChatProps) {
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setIsLoading(true);
     setMessages([...messages, { id: Date.now().toString(), role: "user", content: JSON.stringify([{ text: input }]) }])
     setInput('');
     try {
       await apiClient.sendMessage(input, storedSession?.id);
-      fetchSession();
+      await fetchSession();
+      setIsLoading(false);
     } catch (err) {
       console.error("Error sending message:", err)
+      setIsLoading(false);
     }
   }
 
@@ -160,7 +164,7 @@ export function Chat({ sessionId }: ChatProps) {
                 message={{
                   id: "loading",
                   role: "assistant",
-                  content: "Thinking...",
+                  content: JSON.stringify([{ text: "Thinking..." }]),
                 }}
                 isLoading
               />
