@@ -191,7 +191,7 @@ export function AppSidebar() {
                             onClick={() => handleSessionSelect(session.id)}
                             className="group relative justify-between py-3 px-3 align-middle"
                           >
-                            <div className="flex">
+                            <div className="flex items-center">
                               <MessageSquare className="mr-3 h-4 w-4" />
                               <span className="truncate">{session.name || defaultConversationName}</span>
                             </div>
